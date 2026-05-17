@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Data Copilot — 所有人 × 所有问题 × 一个入口</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #141420;
+    --card: #1a1a2e;
+    --border: #2a2a40;
+    --text: #e8e8f0;
+    --text-dim: #6a6a80;
+    --accent: #6c5ce7;
+    --accent-light: #a29bfe;
+    --green: #00b894;
+    --orange: #fdcb6e;
+    --red: #e17055;
+    --blue: #0984e3;
+    --purple: #6c5ce7;
+    --pink: #e84393;
+    --max-w: 960px;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Hero section ── */
+  .hero {
+    text-align: center;
+    padding: 48px 24px 24px;
+    position: relative;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(108,92,231,0.12);
+    border: 1px solid rgba(108,92,231,0.25);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12px;
+    color: var(--accent-light);
+    margin-bottom: 16px;
+    font-weight: 500;
+  }
+
+  .hero-badge .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .hero h1 {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #fff 0%, var(--accent-light) 50%, var(--pink) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .hero .tagline {
+    font-size: 16px;
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+
+  .hero .tagline strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* ── Role selector bar ── */
+  .role-bar {
+    max-width: var(--max-w);
+    margin: 24px auto 0;
+    padding: 0 24px;
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .role-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+
+  .role-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    background: var(--card);
+  }
+
+  .role-btn.active {
+    border-color: var(--accent);
+    background: rgba(108,92,231,0.15);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(108,92,231,0.15);
+  }
+
+  .role-btn .role-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    background: var(--card);
+    flex-shrink: 0;
+  }
+
+  .role-btn.active .role-avatar {
+    background: var(--accent);
+  }
+
+  /* ── Problem type pills ── */
+  .problem-types {
+    max-width: var(--max-w);
+    margin: 16px auto 0;
+    padding: 0 24px;
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .problem-pill {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-dim);
+    border: 1px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .problem-pill.active {
+    border-color: var(--green);
+    background: rgba(0,184,148,0.1);
+    color: var(--green);
+  }
+
+  .problem-pill.muted {
+    opacity: 0.25;
+  }
+
+  /* ── Main chat area ── */
+  .chat-area {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: 24px 24px 0;
+  }
+
+  /* Welcome screen */
+  .welcome-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 0;
+    transition: opacity 0.3s;
+  }
+
+  .welcome-screen.hidden {
+    display: none;
+  }
+
+  .welcome-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    width: 100%;
+    max-width: 720px;
+    margin-top: 12px;
+  }
+
+  .welcome-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+  }
+
+  .welcome-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+
+  .welcome-card .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .welcome-card .card-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .welcome-card .card-icon.query { background: rgba(9,130,227,0.15); }
+  .welcome-card .card-icon.rca { background: rgba(232,67,147,0.15); }
+  .welcome-card .card-icon.ops { background: rgba(253,203,110,0.15); }
+  .welcome-card .card-icon.sql { background: rgba(0,184,148,0.15); }
+  .welcome-card .card-icon.meta { background: rgba(108,92,231,0.15); }
+  .welcome-card .card-icon.trend { background: rgba(225,112,85,0.15); }
+
+  .welcome-card .card-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .welcome-card .card-problem-type {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .welcome-card .card-question {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .welcome-card .card-role {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.03);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  /* ── Messages ── */
+  .messages { display: none; flex-direction: column; gap: 0; }
+  .messages.active { display: flex; }
+
+  .msg {
+    padding: 20px 0;
+    animation: fadeUp 0.3s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-inner {
+    display: flex;
+    gap: 14px;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 8px;
+  }
+
+  .msg-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .msg-avatar.user { background: var(--accent); color: #fff; }
+  .msg-avatar.assistant { background: linear-gradient(135deg, var(--purple), var(--pink)); color: #fff; }
+
+  .msg-body { flex: 1; min-width: 0; }
+
+  .msg-label {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .msg-label .role-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(108,92,231,0.15);
+    color: var(--accent-light);
+    font-weight: 500;
+  }
+
+  .msg-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  .msg-text p { margin-bottom: 0.8em; }
+  .msg-text p:last-child { margin-bottom: 0; }
+
+  /* Decision chain in messages */
+  .chain-display {
+    background: #12121e;
+    border: 1px solid #2a2a40;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .chain-title {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chain-flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .chain-node {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--card);
+    border: 1px solid var(--border);
+  }
+
+  .chain-node.active {
+    border-color: var(--accent);
+    background: rgba(108,92,231,0.12);
+    color: var(--accent-light);
+    animation: pulse 1.5s infinite;
+  }
+
+  .chain-node.done {
+    border-color: var(--green);
+    background: rgba(0,184,148,0.08);
+    color: var(--green);
+  }
+
+  .chain-arrow {
+    color: var(--text-dim);
+    font-size: 14px;
+    opacity: 0.4;
+  }
+
+  /* Tool result cards */
+  .tool-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    animation: fadeUp 0.3s ease;
+  }
+
+  .tool-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .tool-card-header .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+
+  .tool-card-header .dot.running {
+    background: var(--orange);
+    animation: pulse 1s infinite;
+  }
+
+  .tool-card-body {
+    padding: 0 14px 12px;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: #888;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  .tool-card-body.collapsed { display: none; }
+
+  /* Final answer */
+  .final-answer {
+    background: linear-gradient(135deg, rgba(108,92,231,0.08), rgba(232,67,147,0.05));
+    border: 1px solid rgba(108,92,231,0.2);
+    border-radius: 14px;
+    padding: 18px;
+    margin-top: 8px;
+  }
+
+  .final-answer .answer-label {
+    font-size: 11px;
+    color: var(--accent-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ── Input bar ── */
+  .input-area {
+    max-width: var(--max-w);
+    margin: 24px auto 0;
+    padding: 0 24px 32px;
+  }
+
+  .input-wrap {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 8px 8px 8px 20px;
+    transition: border-color 0.2s;
+  }
+
+  .input-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(108,92,231,0.1);
+  }
+
+  .input-wrap input {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 15px;
+    outline: none;
+    font-family: inherit;
+    padding: 8px 0;
+  }
+
+  .input-wrap input::placeholder { color: var(--text-dim); }
+
+  .send-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .send-btn:hover { background: #5a4bd1; transform: scale(1.05); }
+  .send-btn:disabled { opacity: 0.3; cursor: default; transform: none; }
+  .send-btn svg { width: 18px; height: 18px; }
+
+  .input-footer {
+    text-align: center;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .input-footer .highlight {
+    color: var(--accent-light);
+    font-weight: 600;
+  }
+
+  /* ── Streaming cursor ── */
+  .streaming::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--accent-light);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 0.8s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* ── Typing indicator ── */
+  .typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 0;
+  }
+
+  .typing-indicator span {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    animation: typingBounce 1.2s infinite;
+  }
+
+  .typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
+  .typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
+
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    .hero h1 { font-size: 24px; }
+    .role-btn { padding: 8px 12px; font-size: 12px; }
+    .welcome-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    AI Data Copilot · 自主智能体
+  </div>
+  <h1>所有人 × 所有问题 × 一个入口</h1>
+  <p class="tagline">不是 Text-to-SQL，不是 BI 工具——<strong>所有角色，所有数据问题，通过同一个对话框解决。</strong></p>
+</div>
+
+<!-- Role selector -->
+<div class="role-bar" id="roleBar">
+  <button class="role-btn active" data-role="ops" onclick="selectRole('ops')">
+    <span class="role-avatar">📊</span>
+    业务运营
+  </button>
+  <button class="role-btn" data-role="ceo" onclick="selectRole('ceo')">
+    <span class="role-avatar">👔</span>
+    CEO / 管理层
+  </button>
+  <button class="role-btn" data-role="ops-eng" onclick="selectRole('ops-eng')">
+    <span class="role-avatar">🔧</span>
+    运维工程师
+  </button>
+  <button class="role-btn" data-role="data-eng" onclick="selectRole('data-eng')">
+    <span class="role-avatar">💻</span>
+    数据工程师
+  </button>
+  <button class="role-btn" data-role="sales" onclick="selectRole('sales')">
+    <span class="role-avatar">📈</span>
+    销售总监
+  </button>
+</div>
+
+<!-- Problem type pills -->
+<div class="problem-types" id="problemTypes">
+  <span class="problem-pill active" data-type="query">查数据</span>
+  <span class="problem-pill" data-type="rca">找原因</span>
+  <span class="problem-pill" data-type="ops">排故障</span>
+  <span class="problem-pill" data-type="sql">写SQL</span>
+  <span class="problem-pill" data-type="meta">查结构</span>
+</div>
+
+<!-- Chat area -->
+<div class="chat-area">
+  <!-- Welcome screen with role-based questions -->
+  <div class="welcome-screen" id="welcomeScreen">
+    <div class="welcome-grid" id="welcomeGrid"></div>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages" id="messages"></div>
+</div>
+
+<!-- Input -->
+<div class="input-area">
+  <div class="input-wrap">
+    <input id="mainInput" type="text" placeholder="输入你的问题..." autocomplete="off" />
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M5 12h14M12 5l7 7-7 7"/>
+      </svg>
+    </button>
+  </div>
+  <div class="input-footer">
+    <span class="highlight">所有角色</span> · <span class="highlight">所有问题</span> · 同一个入口 — 你开口问，它全搞定
+  </div>
+</div>
+
+<script>
+// ── Role-based questions ──
+const ROLE_QUESTIONS = {
+  ops: [
+    { type: 'query', icon: 'query', label: '查数据', question: '近7天的GMV趋势怎么样，有没有异常波动', problemType: '查数据' },
+    { type: 'rca', icon: 'rca', label: '找原因', question: '今天GMV为什么下降了', problemType: '找原因' },
+    { type: 'trend', icon: 'trend', label: '看趋势', question: '上个月各区域的销售额对比怎么样', problemType: '查数据' },
+  ],
+  ceo: [
+    { type: 'rca', icon: 'rca', label: '归因分析', question: '今天GMV为什么下降了，是哪个区域出了问题', problemType: '找原因' },
+    { type: 'query', icon: 'query', label: '经营大盘', question: '本月营收目标完成了多少', problemType: '查数据' },
+    { type: 'query', icon: 'trend', label: '趋势对比', question: '今年Q1和去年Q1相比，各业务线表现如何', problemType: '查数据' },
+  ],
+  'ops-eng': [
+    { type: 'ops', icon: 'ops', label: '全链路诊断', question: 'Kafka消费延迟很高，全面诊断一下整个链路', problemType: '排故障' },
+    { type: 'ops', icon: 'ops', label: 'Pipeline排查', question: '数据同步Pipeline从昨晚开始频繁报错，帮我排查', problemType: '排故障' },
+    { type: 'query', icon: 'query', label: '告警查询', question: '最近一周有哪些告警，处理情况如何', problemType: '查数据' },
+  ],
+  'data-eng': [
+    { type: 'sql', icon: 'sql', label: 'SQL编写', question: '帮我写一条SQL，统计各会员等级的月均消费金额和复购率', problemType: '写SQL' },
+    { type: 'meta', icon: 'meta', label: '查表结构', question: 'orders表有哪些字段，表结构是什么', problemType: '查结构' },
+    { type: 'sql', icon: 'sql', label: 'SQL优化', question: '这条SQL执行很慢，帮我优化一下：SELECT * FROM orders WHERE create_time > "2024-01-01"', problemType: '写SQL' },
+  ],
+  sales: [
+    { type: 'query', icon: 'query', label: '区域业绩', question: '华东地区上个月各城市的销售额排名', problemType: '查数据' },
+    { type: 'query', icon: 'trend', label: '目标达成', question: '我们团队这个月完成多少KPI了，还差多少', problemType: '查数据' },
+    { type: 'rca', icon: 'rca', label: '业绩分析', question: '为什么我们这个月的业绩没有达标', problemType: '找原因' },
+  ],
+};
+
+const PROBLEM_TYPES = ['query', 'rca', 'ops', 'sql', 'meta'];
+const PROBLEM_LABELS = { query: '查数据', rca: '找原因', ops: '排故障', sql: '写SQL', meta: '查结构' };
+
+let currentRole = 'ops';
+let isSending = false;
+
+function selectRole(role) {
+  currentRole = role;
+  document.querySelectorAll('.role-btn').forEach(b => b.classList.toggle('active', b.dataset.role === role));
+  renderWelcome();
+}
+
+function renderWelcome() {
+  const grid = document.getElementById('welcomeGrid');
+  const questions = ROLE_QUESTIONS[currentRole];
+  const roleLabel = document.querySelector(`.role-btn[data-role="${currentRole}"]`).textContent.trim();
+
+  grid.innerHTML = questions.map(q => `
+    <div class="welcome-card" onclick="useQuestion('${q.question}')">
+      <div class="card-header">
+        <div class="card-icon ${q.icon}">${q.type === 'query' ? '📊' : q.type === 'rca' ? '🔍' : q.type === 'ops' ? '🔧' : q.type === 'sql' ? '🛠' : '📋'}</div>
+        <div>
+          <div class="card-label">${q.label}</div>
+          <div class="card-problem-type">${q.problemType}</div>
+        </div>
+      </div>
+      <div class="card-question">"${q.question}"</div>
+      <div class="card-role">👤 ${roleLabel}</div>
+    </div>
+  `).join('');
+
+  // Update problem pills
+  document.querySelectorAll('.problem-pill').forEach(pill => {
+    const t = pill.dataset.type;
+    const hasType = questions.some(q => q.type === t);
+    pill.classList.toggle('muted', !hasType);
+  });
+}
+
+function useQuestion(question) {
+  document.getElementById('mainInput').value = question;
+  sendMessage();
+}
+
+// ── Fake demo responses for presentation ──
+const DEMO_RESPONSES = {
+  '近7天的GMV趋势怎么样，有没有异常波动': {
+    chain: [
+      { label: '意图识别', status: 'done' },
+      { label: 'SQL生成', status: 'done' },
+      { label: '执行查询', status: 'done' },
+      { label: '趋势分析', status: 'done' },
+      { label: '生成结论', status: 'done' },
+    ],
+    tools: [
+      { name: 'run_sql', input: { query: 'SELECT date, sum(gmv) FROM dws_order_daily WHERE date >= ... GROUP BY date ORDER BY date' }, result: '7行数据返回，GMV趋势已获取', latency_ms: 1250 },
+    ],
+    answer: '近7天GMV整体呈上升趋势，但在 **5月10日出现明显异常波动**，GMV从日均580万骤降至420万，**跌幅27.6%**，随后在5月11日恢复正常。建议排查5月10日是否有系统故障或促销策略调整。',
+  },
+  '今天GMV为什么下降了': {
+    chain: [
+      { label: '意图识别', status: 'done' },
+      { label: '根因下钻', status: 'done' },
+      { label: '区域拆分', status: 'done' },
+      { label: '品类拆分', status: 'done' },
+      { label: '交叉验证', status: 'done' },
+      { label: '生成结论', status: 'done' },
+    ],
+    tools: [
+      { name: 'root_cause_analysis', input: { metric: 'GMV' }, result: '4层下钻完成：整体 → 区域 → 品类 → 订单验证', latency_ms: 3200 },
+    ],
+    answer: '经过4层自动下钻分析，GMV下降的根因如下：\n\n**核心结论：GMV下降主要由华东地区电子产品销售下滑导致。**\n\n- 整体GMV下降 **15.2%**（昨日820万 → 今日695万）\n- **华东区域**下降最严重，跌幅 **23.1%**，贡献了整体下降的 **62%**\n- 华东区域内，**电子产品**品类下降 **35.4%**，是该区域下跌的主要驱动力\n- 订单表交叉验证：华东电子产品订单量下降 **31.2%**，金额下降 **34.8%**，数据一致\n\n建议优先排查华东区电子产品的供应链、价格策略或竞品动态。',
+  },
+  'Kafka消费延迟很高，全面诊断一下整个链路': {
+    chain: [
+      { label: '意图识别', status: 'done' },
+      { label: '全链路诊断', status: 'done' },
+      { label: 'Flink检查', status: 'done' },
+      { label: 'Kafka检查', status: 'done' },
+      { label: '日志分析', status: 'done' },
+      { label: '告警分析', status: 'done' },
+    ],
+    tools: [
+      { name: 'pipeline_full_diagnosis', input: {}, result: '全链路诊断完成，发现2项异常', latency_ms: 4500 },
+    ],
+    answer: '全链路诊断结果：\n\n**【发现异常】**\n\n1. **Kafka 消费延迟**：orders-topic 当前消费组 lag **128,450**，较正常值（<5,000）超出25倍，消费者TPS明显下降\n2. **Flink 反压告警**：order-transform-job 反压状态为 **HIGH**，Checkpoint延迟 **180s**（正常<30s）\n\n**Flink 任务**：共8个任务，其中 order-transform-job 存在高反压，其余7个任务运行正常\n**Kafka 主题**：共12个主题，orders-topic 延迟严重，其余主题消费正常\n**错误日志**：过去2小时出现 23 条 ConnectionTimeout 错误，集中在 order-consumer-3 节点\n**告警记录**：1条未关闭的 CRITICAL 级别告警，指向 order-transform-job\n\n**根因推断**：order-consumer-3 节点网络异常导致消费变慢，进而引发 Flink 反压和 Checkpoint 延迟。建议优先重启 order-consumer-3 并检查网络连接。',
+  },
+  '帮我写一条SQL，统计各会员等级的月均消费金额和复购率': {
+    chain: [
+      { label: '意图识别', status: 'done' },
+      { label: '元数据查询', status: 'done' },
+      { label: 'SQL生成', status: 'done' },
+    ],
+    tools: [
+      { name: 'query_metadata', input: { query_type: 'schema', table_name: 'orders' }, result: 'Table schema retrieved: member_level, amount, order_date, user_id...', latency_ms: 350 },
+      { name: 'run_sql', input: { query: 'SELECT member_level, AVG(amount) as avg_amount, ...' }, result: 'SQL执行成功，5行数据返回', latency_ms: 890 },
+    ],
+    answer: 'SQL已生成并执行完毕：\n\n```sql\nSELECT \n  member_level,\n  ROUND(AVG(amount), 2) AS avg_amount,\n  ROUND(COUNT(DISTINCT user_id) * 1.0 / COUNT(DISTINCT DATE_FORMAT(order_date, \'%Y-%m\')) , 2) AS avg_monthly_users,\n  ROUND(SUM(CASE WHEN repurchase = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) AS repurchase_rate\nFROM orders\nWHERE order_date >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)\nGROUP BY member_level\nORDER BY avg_amount DESC;\n```\n\n**执行结果**：\n- 黑金会员：月均消费 **¥2,845**，复购率 **68.3%**\n- 金卡会员：月均消费 **¥1,620**，复购率 **52.1%**\n- 银卡会员：月均消费 **¥890**，复购率 **34.7%**\n- 普通会员：月均消费 **¥320**，复购率 **12.5%**\n\n黑金会员的复购率是普通会员的 **5.5倍**，消费金额是 **8.9倍**。',
+  },
+  'orders表有哪些字段，表结构是什么': {
+    chain: [
+      { label: '意图识别', status: 'done' },
+      { label: '元数据查询', status: 'done' },
+    ],
+    tools: [
+      { name: 'query_metadata', input: { query_type: 'schema', table_name: 'orders' }, result: '15 columns retrieved', latency_ms: 380 },
+    ],
+    answer: '**orders 表结构**（ClickHouse, MergeTree 引擎）：\n\n| 字段 | 类型 | 说明 |\n|---|---|---|\n| order_id | String | 订单ID（主键） |\n| user_id | String | 用户ID |\n| member_level | String | 会员等级 |\n| amount | Decimal(18,2) | 订单金额 |\n| region | String | 区域 |\n| category | String | 品类 |\n| order_date | Date | 下单日期 |\n| create_time | DateTime | 创建时间 |\n\n共 **15个字段**，按 `order_date` 分区，按 `order_id` 排序。总行数约 **2.4亿**，存储大小 **18.6GB**。',
+  },
+};
+
+// Default response for questions not in demo map
+function getFallbackResponse(question) {
+  const intent = question.includes('为什么') || question.includes('下降') || question.includes('原因') ? 'rca' :
+                 question.includes('Kafka') || question.includes('Flink') || question.includes('排查') ? 'ops' :
+                 question.includes('帮我写') || question.includes('生成') ? 'sql' :
+                 question.includes('表') || question.includes('字段') || question.includes('结构') ? 'meta' : 'query';
+
+  const chainMap = {
+    query: [{ label: '意图识别', status: 'done' }, { label: 'SQL生成', status: 'done' }, { label: '执行查询', status: 'done' }, { label: '生成结论', status: 'done' }],
+    rca: [{ label: '意图识别', status: 'done' }, { label: '根因下钻', status: 'done' }, { label: '区域拆分', status: 'done' }, { label: '品类拆分', status: 'done' }, { label: '交叉验证', status: 'done' }, { label: '生成结论', status: 'done' }],
+    ops: [{ label: '意图识别', status: 'done' }, { label: '全链路诊断', status: 'done' }, { label: 'Flink检查', status: 'done' }, { label: 'Kafka检查', status: 'done' }, { label: '日志分析', status: 'done' }, { label: '告警分析', status: 'done' }],
+    sql: [{ label: '意图识别', status: 'done' }, { label: 'SQL生成', status: 'done' }, { label: '执行验证', status: 'done' }],
+    meta: [{ label: '意图识别', status: 'done' }, { label: '元数据查询', status: 'done' }],
+  };
+
+  return {
+    chain: chainMap[intent],
+    tools: [{ name: intent === 'meta' ? 'query_metadata' : intent === 'ops' ? 'pipeline_full_diagnosis' : intent === 'rca' ? 'root_cause_analysis' : 'run_sql', input: {}, result: '数据已获取', latency_ms: 1200 }],
+    answer: `系统已识别你的问题并完成处理。\n\n**意图类型**：${PROBLEM_LABELS[intent] || '数据查询'}\n**处理状态**：已完成\n\n（这是演示页面，连接后端API后可看到真实回答。）`,
+  };
+}
+
+// ── Send message ──
+async function sendMessage() {
+  const input = document.getElementById('mainInput');
+  const text = input.value.trim();
+  if (!text || isSending) return;
+
+  isSending = true;
+  input.value = '';
+  document.getElementById('sendBtn').disabled = true;
+
+  // Hide welcome, show messages
+  document.getElementById('welcomeScreen').classList.add('hidden');
+  document.getElementById('messages').classList.add('active');
+
+  const roleLabel = document.querySelector(`.role-btn[data-role="${currentRole}"]`).textContent.trim();
+
+  // User message
+  appendUserMsg(text, roleLabel);
+
+  // Assistant message container
+  const msgEl = createAssistantMsg();
+
+  // Show typing
+  showTyping(msgEl);
+
+  // Get response (try real API first, fallback to demo)
+  const response = DEMO_RESPONSES[text] || getFallbackResponse(text);
+
+  // Try real API
+  try {
+    const resp = await fetch('/api/v1/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dev-token' },
+      body: JSON.stringify({ session_id: 'demo-' + Date.now(), user_id: 'demo-user', message: text }),
+    });
+    if (resp.ok && resp.headers.get('content-type')?.includes('text/event-stream')) {
+      await streamRealResponse(msgEl, resp);
+      return;
+    }
+  } catch(e) { /* fallback to demo */ }
+
+  // Simulated demo flow
+  await simulateDemoFlow(msgEl, response);
+}
+
+async function streamRealResponse(msgEl, resp) {
+  hideTyping(msgEl);
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let currentEvent = '';
+  let answer = '';
+
+  // Create chain display
+  const chainEl = msgEl.querySelector('.chain-container');
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      if (line.startsWith('event: ')) { currentEvent = line.slice(7).trim(); continue; }
+      if (line.startsWith('data: ')) {
+        const data = JSON.parse(line.slice(6));
+        if (currentEvent === 'thinking') { showThinking(msgEl); }
+        if (currentEvent === 'tool_call') { addToolCard(msgEl.steps, data.tool, data.input, null, true); }
+        if (currentEvent === 'tool_result') { updateToolCard(msgEl.steps, data.tool, data.result, data.latency_ms); }
+        if (currentEvent === 'answer_token') { answer = data.text || ''; msgEl.body.innerHTML = renderMarkdown(answer); }
+        if (currentEvent === 'final_answer') {
+          answer = data.answer || answer;
+          hideThinking(msgEl);
+          msgEl.body.innerHTML = renderMarkdown(answer);
+        }
+      }
+    }
+  }
+  finishMessage(msgEl);
+}
+
+async function simulateDemoFlow(msgEl, response) {
+  // Phase 1: Show thinking
+  await delay(800);
+  hideTyping(msgEl);
+  showThinking(msgEl);
+
+  // Phase 2: Show decision chain
+  await delay(600);
+  hideThinking(msgEl);
+  renderChain(msgEl.chain, response.chain);
+
+  // Phase 3: Show tools one by one
+  for (const tool of response.tools) {
+    await delay(800);
+    addToolCard(msgEl.steps, tool.name, tool.input, null, true);
+    await delay(400 + Math.random() * 600);
+    updateToolCard(msgEl.steps, tool.name, tool.result, tool.latency_ms);
+  }
+
+  // Phase 4: Show answer with typing effect
+  await delay(400);
+  const answerEl = document.createElement('div');
+  answerEl.className = 'final-answer';
+  answerEl.innerHTML = `<div class="answer-label">✓ 分析结论</div><div class="final-answer-text streaming"></div>`;
+  msgEl.body.appendChild(answerEl);
+  await typeText(answerEl.querySelector('.final-answer-text'), response.answer);
+
+  finishMessage(msgEl);
+}
+
+// ── UI helpers ──
+function appendUserMsg(text, roleLabel) {
+  const msg = document.createElement('div');
+  msg.className = 'msg';
+  msg.innerHTML = `
+    <div class="msg-inner">
+      <div class="msg-avatar user">U</div>
+      <div class="msg-body">
+        <div class="msg-label">你 <span class="role-tag">${roleLabel}</span></div>
+        <div class="msg-text">${escapeHtml(text)}</div>
+      </div>
+    </div>`;
+  document.getElementById('messages').appendChild(msg);
+  scrollToBottom();
+}
+
+function createAssistantMsg() {
+  const msg = document.createElement('div');
+  msg.className = 'msg';
+  msg.innerHTML = `
+    <div class="msg-inner">
+      <div class="msg-avatar assistant">AI</div>
+      <div class="msg-body">
+        <div class="msg-label">AI Data Copilot</div>
+        <div class="chain-container"></div>
+        <div class="thinking-container"></div>
+        <div class="steps"></div>
+        <div class="answer-body"></div>
+      </div>
+    </div>`;
+  document.getElementById('messages').appendChild(msg);
+  scrollToBottom();
+  return {
+    el: msg,
+    chain: msg.querySelector('.chain-container'),
+    steps: msg.querySelector('.steps'),
+    body: msg.querySelector('.answer-body'),
+    thinking: msg.querySelector('.thinking-container'),
+  };
+}
+
+function renderChain(container, nodes) {
+  container.innerHTML = `
+    <div class="chain-display">
+      <div class="chain-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        AI 决策链路
+      </div>
+      <div class="chain-flow" id="chainFlow"></div>
+    </div>`;
+  const flow = document.getElementById('chainFlow');
+  nodes.forEach((node, i) => {
+    if (i > 0) {
+      const arrow = document.createElement('span');
+      arrow.className = 'chain-arrow';
+      arrow.textContent = '→';
+      flow.appendChild(arrow);
+    }
+    const el = document.createElement('span');
+    el.className = `chain-node ${node.status}`;
+    el.textContent = node.label;
+    el.id = `chain-node-${i}`;
+    flow.appendChild(el);
+  });
+}
+
+function showThinking(msgEl) {
+  msgEl.thinking.innerHTML = `
+    <div class="typing-indicator">
+      <span></span><span></span><span></span>
+      <span style="font-size:12px;color:var(--text-dim);margin-left:4px;">正在思考...</span>
+    </div>`;
+}
+
+function hideThinking(msgEl) {
+  msgEl.thinking.innerHTML = '';
+}
+
+function showTyping(msgEl) {
+  msgEl.body.innerHTML = `
+    <div class="typing-indicator">
+      <span></span><span></span><span></span>
+    </div>`;
+}
+
+function addToolCard(container, name, input, result, running) {
+  const card = document.createElement('div');
+  card.className = 'tool-card';
+  card.id = `tool-${name}`;
+  card.innerHTML = `
+    <div class="tool-card-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
+      <span class="dot ${running ? 'running' : ''}"></span>
+      <span>${escapeHtml(name)}</span>
+      <span style="color:#555;font-size:10px;">${escapeHtml(JSON.stringify(input))}</span>
+    </div>
+    <div class="tool-body collapsed">${result ? escapeHtml(result) : '执行中...'}</div>`;
+  container.appendChild(card);
+  scrollToBottom();
+}
+
+function updateToolCard(container, name, result, latencyMs) {
+  const card = document.getElementById(`tool-${name}`);
+  if (card) {
+    const dot = card.querySelector('.dot');
+    dot.classList.remove('running');
+    const body = card.querySelector('.tool-body');
+    body.innerHTML = escapeHtml(trunc(result, 500)) + (latencyMs ? `\n\n耗时 ${Math.round(latencyMs)}ms` : '');
+  }
+  scrollToBottom();
+}
+
+async function typeText(el, text) {
+  const chars = text.split('');
+  for (let i = 0; i < chars.length; i++) {
+    el.textContent = text.substring(0, i + 1);
+    // Speed up for long texts
+    if (i < 50) await delay(15);
+    else if (i % 5 === 0) await delay(8);
+    else await delay(2);
+  }
+  el.classList.remove('streaming');
+  el.innerHTML = renderMarkdown(text);
+}
+
+function finishMessage(msgEl) {
+  isSending = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('mainInput').focus();
+}
+
+function renderMarkdown(text) {
+  // Simple markdown renderer
+  let html = escapeHtml(text);
+  // Bold
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Inline code
+  html = html.replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:3px;font-size:0.9em;">$1</code>');
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function trunc(s, n) { return s.length > n ? s.slice(0,n) + '...' : s; }
+function scrollToBottom() {
+  const msgs = document.getElementById('messages');
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// Input handler
+document.getElementById('mainInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !isSending) sendMessage();
+});
+
+// Init
+renderWelcome();
+document.getElementById('mainInput').focus();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,5 @@
+
+按照 docs/AI-Data-Copilot-MVP-Design.md 的设计，生成 todolist。
+然后按照todolist，逐个生成代码。
+
+需要用到的组件的链接信息全部放在配置config.py中。

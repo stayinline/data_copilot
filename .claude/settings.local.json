@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from src.gateway.api import app; print\\(f''App: {app.title}''\\)\")",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(pip show:*)",
+      "Bash(.venv/Scripts/python.exe -c \":*)",
+      "Bash(tasklist)",
+      "Bash(curl -s -X POST http://localhost:8800/api/v1/chat/stream -H \"Content-Type: application/json\" -H \"Authorization: Bearer dev-token\" -d '{\"\"\"\"session_id\"\"\"\": \"\"\"\"test-1\"\"\"\", \"\"\"\"user_id\"\"\"\": \"\"\"\"test-user\"\"\"\", \"\"\"\"message\"\"\"\": \"\"\"\"近7天的GMV趋势怎么样，有没有异常波动\"\"\"\"}')",
+      "Bash(curl -s -X POST http://localhost:8800/api/v1/chat/stream -H \"Content-Type: application/json\" -H \"Authorization: Bearer dev-token\" -d '{\"\"\"\"session_id\"\"\"\": \"\"\"\"test-2\"\"\"\", \"\"\"\"user_id\"\"\"\": \"\"\"\"test-user\"\"\"\", \"\"\"\"message\"\"\"\": \"\"\"\"近7天的GMV趋势怎么样\"\"\"\"}')",
+      "Bash(curl -s -X POST http://localhost:8800/api/v1/chat/stream -H \"Content-Type: application/json\" -H \"Authorization: Bearer dev-token\" -d '{\"\"\"\"session_id\"\"\"\": \"\"\"\"test-3\"\"\"\", \"\"\"\"user_id\"\"\"\": \"\"\"\"test-user\"\"\"\", \"\"\"\"message\"\"\"\": \"\"\"\"近7天的GMV趋势怎么样\"\"\"\"}')",
+      "Bash(curl -s -X POST http://localhost:8800/api/v1/chat/stream -H \"Content-Type: application/json\" -H \"Authorization: Bearer dev-token\" -d \"{\"\"session_id\"\":\"\"test-3\"\",\"\"user_id\"\":\"\"test-user\"\",\"\"message\"\":\"\"近7天的GMV趋势怎么样\"\"}\")",
+      "Bash(.venv/Scripts/python.exe -c \"\nimport httpx, json\nr = httpx.post\\('http://localhost:8800/api/v1/chat/stream',\n    json={'session_id':'t5','user_id':'u1','message':'近7天的GMV趋势怎么样'},\n    headers={'Authorization':'Bearer dev-token'}, timeout=60\\)\nfor line in r.text.split\\('\\\\n'\\):\n    if line.startswith\\('data: '\\):\n        try:\n            d = json.loads\\(line[6:]\\)\n            if 'tool_call' in line or 'tool_result' in line or 'final_answer' in line or 'answer' in line:\n                print\\(json.dumps\\(d, ensure_ascii=False\\)[:300]\\)\n        except:\n            pass\n    elif line.startswith\\('event: '\\):\n        evt = line[7:]\n        if evt in \\('tool_call','tool_result','final_answer'\\):\n            print\\(f'[EVENT: {evt}]'\\)\n\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8800/)",
+      "Bash(curl -s http://localhost:8800/static/demo.html)",
+      "Bash(find D:/code/data_copilot -name \"*.pyc\" -delete)",
+      "Bash(find D:/code/data_copilot -name \"__pycache__\" -exec rm -rf {} +)",
+      "WebFetch(domain:help.aliyun.com)",
+      "WebFetch(domain:www.alibabacloud.com)",
+      "Bash(rm:*)",
+      "Bash(ls -1 D:/code/data_copilot/scripts/gen_ppt/gen_*.py)"
+    ]
+  }
+}
