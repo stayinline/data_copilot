@@ -1,92 +1,231 @@
-# data-copilot
+# AI Data Copilot
 
+> AI-powered assistant for data engineers — natural language data querying, automated analysis, and multi-step task planning.
 
+[![Python 3.13+](https://img.shields.io/badge/Python-3.13+-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-async-009688.svg)](https://fastapi.tiangolo.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Agent-6d28d9.svg)](https://langchain-ai.github.io/langgraph/)
+[![License: Internal](https://img.shields.io/badge/License-Internal-lightgrey.svg)]()
 
-## Getting started
+## Overview
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+AI Data Copilot enables data engineers to interact with data infrastructure using natural language. Instead of writing SQL or running diagnostic scripts manually, simply ask questions in Chinese (e.g., "昨天的GMV是多少？") and the system automatically understands intent, generates and executes SQL, performs root cause analysis, and returns structured answers — all through a conversational interface.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+**Goal:** Improve data development and troubleshooting efficiency by 3x.
 
-## Add your files
+## Features
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+- **Natural Language Data Querying** — Ask data questions in plain language; the system generates and executes ClickHouse SQL automatically
+- **Three-Tier Intent Classification** — Regex → Embedding → LLM routing for fast and accurate intent detection
+- **Dual Execution Modes** — LangGraph planner (default) or ReAct loop, configurable via settings
+- **SQL Auto-Fix** — LLM-driven automatic SQL correction on execution errors (up to 3 retries)
+- **Built-in Tools**:
+  - `run_sql` — Read-only SQL execution on ClickHouse with result caching
+  - `query_metadata` — Schema discovery, DDL lookup, and table statistics
+  - `root_cause_analysis` — Automatic metric anomaly drill-down by region and category
+  - `pipeline_troubleshoot` — Flink/Kafka/logs/alerts diagnostic checks
+  - `pipeline_full_diagnosis` — End-to-end pipeline cascade diagnosis
+- **SQL Safety** — Keyword blacklist, AST-based table whitelist validation, automatic LIMIT injection, read-only access
+- **SSE Streaming API** — Real-time structured events: `intent`, `thinking`, `tool_call`, `tool_result`, `sql_fix`, `final_answer`, `metrics`, `guidance`, `done`
+- **Session Management** — Persistent sessions in PostgreSQL, short-term context in Redis with auto-summarization
+- **Prometheus Metrics** — Chat, tool, LLM, cache, and SQL auto-fix metrics at `/metrics`
+- **Rate Limiting** — Configurable per-user rate limiting
+- **Web UI** — Built-in chat interface served at the root endpoint
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Language** | Python 3.13 |
+| **Web Framework** | FastAPI (async) |
+| **ASGI Server** | Uvicorn |
+| **LLM** | Alibaba Cloud DashScope (Qwen models) |
+| **Agent Framework** | LangGraph / ReAct |
+| **SQL Engine** | ClickHouse (`clickhouse-connect`) |
+| **Session Store** | PostgreSQL (`asyncpg` + SQLAlchemy) |
+| **Cache** | Redis |
+| **SQL Parser** | sqlglot |
+| **Auth** | PyJWT |
+| **Monitoring** | Prometheus |
+
+## Architecture
 
 ```
-cd existing_repo
-git remote add origin https://git.megarobo.info/mega-data-center/data-copilot.git
-git branch -M master
-git push -uf origin master
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Web UI     │────▶│  FastAPI GW  │────▶│ Intent Class │
+│ (index.html) │◀────│  (SSE/REST)  │     │   (3-tier)   │
+└──────────────┘     └──────┬───────┘     └──────┬───────┘
+                            │                    │
+                     ┌──────▼───────┐     ┌──────▼───────┐
+                     │   Planner    │────▶│   Tools      │
+                     │ (LangGraph/  │     │ (SQL/Meta/   │
+                     │   ReAct)     │     │  RCA/Pipeline)│
+                     └──────┬───────┘     └──────┬───────┘
+                            │                    │
+                     ┌──────▼───────┐     ┌──────▼───────┐
+                     │  Summarizer  │     │  ClickHouse  │
+                     │  (Context)   │     │  PostgreSQL  │
+                     └──────────────┘     │    Redis     │
+                                          └──────────────┘
 ```
 
-## Integrate with your tools
+## Quick Start
 
-- [ ] [Set up project integrations](https://git.megarobo.info/mega-data-center/data-copilot/-/settings/integrations)
+### Prerequisites
 
-## Collaborate with your team
+- Python 3.13+
+- PostgreSQL
+- ClickHouse
+- Redis
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+### Installation
 
-## Test and Deploy
+```bash
+# Clone the repository
+git clone https://git.megarobo.info/mega-data-center/data-copilot.git
+cd data-copilot
 
-Use the built-in continuous integration in GitLab.
+# Create and activate virtual environment
+python -m venv .venv
+.venv/Scripts/activate    # Windows
+# source .venv/bin/activate  # Linux/macOS
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+# Install dependencies
+pip install -r requirements.txt
+```
 
-***
+### Configuration
 
-# Editing this README
+Edit `config.py` to configure:
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+- **LLM**: Model selection, API key, and base URL (default: Qwen via DashScope)
+- **Database**: PostgreSQL DSN (`POSTGRES_DSN`), ClickHouse connection (host, port, user, password, database)
+- **Cache**: Redis DSN (`REDIS_DSN`)
+- **Server**: Host, port, debug mode (`APP_HOST`, `APP_PORT`, `DEBUG`)
+- **Planner**: Execution mode (`PLANNER_MODE`: `langgraph` or `react`)
+- **Auth**: JWT secret key for production use
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Run
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+python main.py
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+The server starts on `0.0.0.0:8800` by default. Access the web UI at `http://localhost:8800/`.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Seed Demo Data
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```bash
+python scripts/seed_demo_data.py
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## API Endpoints
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Serve the web UI |
+| `POST` | `/api/v1/chat` | Non-streaming chat (returns full answer) |
+| `POST` | `/api/v1/chat/stream` | Streaming chat via Server-Sent Events (SSE) |
+| `GET` | `/api/v1/sessions` | List user sessions |
+| `GET` | `/api/v1/sessions/{id}` | Get session detail |
+| `DELETE` | `/api/v1/sessions/{id}` | Delete a session |
+| `GET` | `/api/v1/logs` | Get tool execution logs for a session |
+| `GET` | `/metrics` | Prometheus metrics |
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## SSE Stream Events
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+The streaming endpoint (`/api/v1/chat/stream`) emits structured events:
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+| Event | Description |
+|-------|-------------|
+| `intent` | Classified user intent |
+| `thinking` | LLM reasoning in progress |
+| `tool_call` | Tool being invoked |
+| `tool_result` | Tool execution result |
+| `sql_fix` | SQL auto-fix attempt |
+| `final_answer` | Final response to user |
+| `metrics` | Performance metrics summary |
+| `guidance` | Follow-up suggestions |
+| `done` | Stream complete |
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Project Structure
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```
+data-copilot/
+├── main.py                        # Entry point (starts uvicorn)
+├── config.py                      # Central configuration
+├── requirements.txt               # Python dependencies
+├── README.md                      # This file
+├── src/
+│   ├── agent/
+│   │   ├── intent.py              # Three-tier intent classifier
+│   │   ├── context.py             # ExecutionContext dataclass
+│   │   ├── llm_client.py          # LLM chat & embedding API
+│   │   ├── planner.py             # LangGraph planner nodes
+│   │   ├── planner_run.py         # Planner execution runner
+│   │   ├── planner_state.py       # LangGraph TypedDict state
+│   │   ├── react.py               # ReAct loop implementation
+│   │   ├── sql_fix.py             # SQL auto-fix on error
+│   │   └── summarizer.py          # Conversation summarization
+│   ├── gateway/
+│   │   ├── api.py                 # FastAPI app & REST endpoints
+│   │   ├── auth.py                # JWT authentication
+│   │   ├── metrics.py             # Prometheus metrics
+│   │   └── rate_limiter.py        # Rate limiting
+│   ├── tools/
+│   │   ├── base.py                # Tool base class & registry
+│   │   ├── run_sql.py             # Read-only SQL execution
+│   │   ├── query_metadata.py      # Schema & metadata queries
+│   │   ├── root_cause_analysis.py # Metric anomaly drill-down
+│   │   ├── pipeline_troubleshoot.py # Pipeline diagnostics
+│   │   └── pipeline_full_diagnosis.py # End-to-end diagnosis
+│   ├── sql/
+│   │   ├── schema_loader.py       # DDL parser for table whitelist
+│   │   └── validator.py           # SQL safety validation
+│   ├── storage/
+│   │   ├── db.py                  # PostgreSQL models
+│   │   ├── memory.py              # Redis session memory
+│   │   └── redis_client.py        # Redis client wrapper
+│   ├── cache/
+│   │   └── query_cache.py         # SQL result caching
+│   └── utils/
+│       └── logging.py             # Structured logging
+├── sql/
+│   └── demo_cases.sql             # DDL + sample data
+├── static/
+│   ├── index.html                 # Web UI chat interface
+│   └── demo.html                  # Demo page
+├── scripts/
+│   ├── seed_demo_data.py          # Data seeding script
+│   └── gen_ppt/                   # PPT generation
+└── docs/                          # Design documents
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## Intent Classification
 
-## License
-For open source projects, say how it is licensed.
+The system uses a three-tier approach to classify user intent:
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+1. **Tier 1 — Regex** (fastest): Pattern matching for greetings, SQL troubleshooting, pipeline issues, metadata queries, data queries, SQL generation, SQL optimization, metric diagnostics
+2. **Tier 2 — Embedding**: Cosine similarity against pre-defined examples
+3. **Tier 3 — LLM** (fallback): Full LLM classification
+
+Three intent types are supported: `TOOL` (needs tool execution), `DIRECT` (direct LLM answer), `TROUBLESHOOT` (multi-tool diagnosis).
+
+## SQL Safety
+
+Multi-layer security ensures safe SQL execution:
+
+1. **Keyword Blacklist**: Blocks DDL/DML statements (INSERT, UPDATE, DELETE, DROP, etc.)
+2. **AST Validation**: Uses `sqlglot` to parse SQL and validate against table whitelist
+3. **Automatic LIMIT**: Injects LIMIT clause if missing to prevent large result sets
+4. **Read-Only Access**: Database user has read-only permissions
+
+## Prometheus Metrics
+
+Available at `/metrics`:
+
+- `chat_requests_total` — Total chat requests counter
+- `tool_calls_total` — Tool invocation counts by type
+- `llm_latency_seconds` — LLM request latency histogram
+- `cache_hits_total` / `cache_misses_total` — Cache hit/miss counters
+- `sql_fix_attempts_total` — SQL auto-fix attempt count
