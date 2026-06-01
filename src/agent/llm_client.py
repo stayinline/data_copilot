@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 import time
 
 import httpx
@@ -38,7 +39,8 @@ async def chat_completion(
 
     for attempt in range(max_retries + 1):
         if attempt > 0:
-            _log.debug("chat_completion retry %d/%d", attempt, max_retries)
+            wait = (2 ** attempt) + random.uniform(0, 1)
+            _log.debug("chat_completion retry %d/%d (wait %.1fs)", attempt, max_retries, wait)
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(
@@ -66,10 +68,16 @@ async def chat_completion(
                 _log.debug("chat_completion success  content_len=%d", len(content))
                 record_llm_call(time.monotonic() - start)
                 return content
-        except Exception as e:
+        except (httpx.TimeoutException, httpx.NetworkError) as e:
             last_exc = e
             if attempt < max_retries:
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep((2 ** attempt) + random.uniform(0, 1))
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code >= 500 and attempt < max_retries:
+                last_exc = e
+                await asyncio.sleep((2 ** attempt) + random.uniform(0, 1))
+            else:
+                raise
     record_llm_call(time.monotonic() - start)
     raise last_exc
 
@@ -82,8 +90,10 @@ async def chat_completion_stream(
     """Stream LLM chat completion via SSE."""
     model = model or CHAT_MODEL
     start = time.monotonic()
+    # Use differentiated timeout: short connect, long read for streaming generation
+    stream_timeout = httpx.Timeout(LLM_TIMEOUT, connect=30.0, read=120.0, pool=10.0)
     try:
-        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=stream_timeout) as client:
             async with client.stream(
                 "POST",
                 f"{MODEL_BASE_URL}/chat/completions",
@@ -136,27 +146,41 @@ class StreamingChatModel:
             )
 
 
-async def embed(texts: list[str], model: str | None = None) -> list[list[float]]:
-    """Call embedding API with automatic batching (max 10 per request)."""
+async def embed(texts: list[str], model: str | None = None, max_retries: int = 2) -> list[list[float]]:
+    """Call embedding API with automatic batching (max 10 per request) and retry."""
     model = model or EMBEDDING_MODEL
     start = time.monotonic()
-    try:
-        batch_size = 10
-        all_embeddings: list[list[float]] = []
-        async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-            for i in range(0, len(texts), batch_size):
-                batch = texts[i:i + batch_size]
-                resp = await client.post(
-                    f"{MODEL_BASE_URL}/embeddings",
-                    headers={"Authorization": f"Bearer {MODEL_API_KEY}"},
-                    json={"model": model, "input": batch},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                all_embeddings.extend(item["embedding"] for item in data["data"])
-        return all_embeddings
-    finally:
-        record_llm_call(time.monotonic() - start)
+    batch_size = 10
+    all_embeddings: list[list[float]] = []
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            last_exc = None
+            for attempt in range(max_retries + 1):
+                try:
+                    resp = await client.post(
+                        f"{MODEL_BASE_URL}/embeddings",
+                        headers={"Authorization": f"Bearer {MODEL_API_KEY}"},
+                        json={"model": model, "input": batch},
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    all_embeddings.extend(item["embedding"] for item in data["data"])
+                    break
+                except (httpx.TimeoutException, httpx.NetworkError) as e:
+                    last_exc = e
+                    if attempt < max_retries:
+                        await asyncio.sleep((2 ** attempt) + random.uniform(0, 1))
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code >= 500 and attempt < max_retries:
+                        last_exc = e
+                        await asyncio.sleep((2 ** attempt) + random.uniform(0, 1))
+                    else:
+                        raise
+            else:
+                raise last_exc  # type: ignore[misc]
+    record_llm_call(time.monotonic() - start)
+    return all_embeddings
 
 
 def select_model_for_task(intent: str, task_type: str = "") -> str:

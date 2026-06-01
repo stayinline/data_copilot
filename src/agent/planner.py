@@ -6,9 +6,14 @@ from langgraph.graph import StateGraph, END
 from src.agent.planner_state import PlannerState
 from src.agent.llm_client import chat_completion
 from src.agent.sql_fix import auto_fix_sql
+from src.agent.prompt_compiler import (
+    build_planner_prompt as compile_planner_prompt,
+    build_tools_info,
+)
+from src.agent.sql_utils import extract_user_sql
 from src.tools.base import ToolRegistry
 from src.sql.validator import SqlValidator
-from src.sql.schema_loader import SCHEMA_TEXT, ALLOWED_TABLES
+from src.sql.schema_loader import ALLOWED_TABLES
 from src.utils.logging import get_logger
 from config import (
     CHAT_MODEL,
@@ -18,36 +23,9 @@ from config import (
 
 _log = get_logger("planner.graph")
 
-from src.tools.base import ToolRegistry
-
 
 def _extract_user_sql(query: str) -> str | None:
-    """Extract a SQL statement from a user query that asks for SQL diagnosis.
-
-    Matches patterns like:
-    - "这条SQL报错帮我看看什么问题：SELECT ..."
-    - "帮我看看这个SQL：SELECT ..."
-    - Queries containing SELECT/INSERT/UPDATE/DELETE with a clear SQL statement
-    """
-    import re
-
-    # Match SQL keywords that indicate an embedded SQL statement
-    sql_match = re.search(
-        r"(SELECT|select|INSERT|insert|UPDATE|update|DELETE|delete|CREATE|create|DROP|drop)\b"
-        r"\s+.*",
-        query,
-        re.DOTALL,
-    )
-    if not sql_match:
-        return None
-
-    extracted = sql_match.group(0).strip()
-    # Remove trailing markdown or prompts
-    extracted = re.split(r"\s*```", extracted)[0]
-    extracted = re.split(r"\s*\n\s*(帮我|请|看看|分析|检查|谢谢)", extracted)[0]
-    # If it ends with a SQL keyword, trim it
-    extracted = extracted.rstrip(" ,;")
-    return extracted if len(extracted) > 10 else None
+    return extract_user_sql(query)
 
 
 def _build_planner_prompt(
@@ -55,118 +33,11 @@ def _build_planner_prompt(
     previous_analysis: str = "",
     tool_results: list[dict] | None = None,
 ) -> str:
-    tools_info = _build_tools_info()
-
-    # ── Detect embedded SQL in user query and inject as top instruction ──
-    sql_diagnosis_block = ""
-    if user_query:
-        extracted_sql = _extract_user_sql(user_query)
-        if extracted_sql:
-            sql_diagnosis_block = (
-                f"## SQL 诊断任务（最高优先级）\n\n"
-                f"用户在下面提供了一条 SQL，要求你帮他检查问题。\n"
-                f"**你必须先原封不动地执行这条 SQL，再根据实际返回的结果（数据或报错信息）来分析问题。**\n"
-                f"不要查 schema 就开始空分析，不要写新的 SQL 来代替用户提供的 SQL。\n\n"
-                f"用户提供的 SQL：\n```sql\n{extracted_sql}\n```\n\n"
-                f"**你的第一步：用 run_sql 工具执行上面的 SQL。这是你必须做的第一件事。**\n"
-                f"**如果 SQL 执行报错（如 Unknown identifier / 字段不存在 / 表不存在），下一步必须调用 query_metadata 工具（query_type=\"schema\"）查看该表的实际字段，确认用户的 SQL 中哪些地方写错了，然后基于真实 schema 指出问题所在。**\n"
-            )
-
-    prompt = f"""\
-你是一个数据平台的规划器。你的任务是基于用户的问题，决定下一步该做什么。
-{sql_diagnosis_block}
-
-可用数据表结构（仅供参考，实际表结构以 query_metadata 工具返回为准）：
-{SCHEMA_TEXT}
-
-可用工具：
-{tools_info}
-
-调用工具格式：{{"name": "工具名", "input": {{...}}}}
-给出最终回答格式：{{"name": "final_answer", "content": "回答内容"}}
-
-重要提示（必须遵守）：
-- 当用户询问"有哪些表"、"表结构"、"表字段"等元数据问题时，必须调用 query_metadata 工具（query_type="list_tables" 或 "schema"），绝对不要写 SQL 查询 system 表，绝对不要直接用 prompt 中的表结构信息直接回答
-- 当用户询问业务数据（如 GMV、订单量等）时，调用 run_sql 工具写 SQL 查询
-- **当用户提供了一条 SQL 并要求"帮我看看什么问题"、"这条 SQL 报错"、"帮我检查 SQL"时：先用 run_sql 执行该 SQL，根据实际返回结果（数据或报错信息）来分析问题，不要只查 schema 就开始空分析**
-- **query_metadata 返回 schema 后，必须继续用 run_sql 查询实际数据，不要把 schema 本身当作最终答案**
-- **区分趋势分析和归因分析**：
-  - "趋势怎么样"、"有没有异常波动"、"各区域对比" → 用 run_sql 查数据，然后分析数据给出结论。查询 metrics 表时注意：该表按 (metric_date, metric_name, region, category) 四维度存储，每个日期有多条记录。**查趋势时 SQL 必须同时满足以下三点**：
-    1. 过滤 region 和 category：`WHERE region = '华东' AND category = '合计'`（如果用户指定了区域）或 `WHERE category = '合计'`（如果用户查整体）
-    2. 用日期范围代替 LIMIT：`WHERE metric_date >= (SELECT max(metric_date) FROM metrics) - INTERVAL 7 DAY`
-    3. 按日期排序：`ORDER BY metric_date ASC`
-    错误示例：`SELECT metric_date, metric_value FROM metrics WHERE metric_name = 'GMV' ORDER BY metric_date DESC LIMIT 7` — 这只会返回同一天的 7 条不同 region 的数据
-    正确示例：`SELECT metric_date, sum(metric_value) as gmv FROM metrics WHERE metric_name = 'GMV' AND metric_date >= (SELECT max(metric_date) FROM metrics) - INTERVAL 7 DAY GROUP BY metric_date ORDER BY metric_date ASC`
-  - "为什么下降"、"是什么原因导致下跌"、"哪个区域影响最大" → 调用 root_cause_analysis 工具（metric=指标名）
-- **如果已经通过 run_sql 获取了趋势数据，直接分析数据给出结论（final_answer），不要额外调用 root_cause_analysis**
-- 当用户询问 Pipeline 排障相关问题（如 Kafka 消费延迟、Flink 任务状态、Pipeline 报错日志、告警记录、数据链路故障等）时，优先调用 pipeline_full_diagnosis 工具进行全链路自动诊断；如果需要针对某个环节深入排查，再调用 pipeline_troubleshoot 工具（operation: check_kafka/check_flink/check_logs/check_alerts）
-- SCHEMA_TEXT 仅供参考，所有工具查询操作必须通过 query_metadata 工具，不要跳过工具调用
-- **每次只能调用一个工具**，不要同时调用多个工具，需要依次调用
-
-规则：
-- 所有结论必须有数据支撑
-- 先给出核心结论，再补充数据细节和分析说明
-- 适当解读数据背后的含义，如趋势、对比、异常等
-- 不要编造数据
-- 如果不确定表结构，先调用 query_metadata 工具查看 schema
-- 如果问题已经回答，直接输出 final_answer
-- SQL 生成必须基于上述表结构，不要虚构表名或字段名
-
-关键行为准则：
-- **如果上一步调用的是 query_metadata 且返回了 schema/表结构，下一步必须写 SQL（run_sql）来查询用户实际要的数据，绝对不能把表结构当作最终答案**
-- **如果上一步已经执行了工具并返回了数据结果，你必须推进到下一步操作（如调用 run_sql 执行查询），绝对不要重复调用已经成功的工具**
-- **如果已经获得了足够回答问题的数据，立即输出 final_answer**
-- **不要重复已经执行过的工具调用，每次调用都应该是新的、不同的操作**
-- **分析 SQL 报错时，必须先看 run_sql 的实际返回结果（数据或错误信息），不要脱离实际执行结果做猜测**
-- **ClickHouse 的 ORDER BY 默认 ASC，不需要强制写 ASC/DESC，这不是语法错误**
-- **如果 SQL 返回空结果（"columns": [], "rows": [] 或数据为空），必须如实告知用户没有数据，并分析可能原因（如日期范围不对、过滤条件太严等），绝对不要编造数据或表格**
-- **绝对禁止编造任何数据——所有数字、表格、区域名称必须来自实际执行结果，不要 "举例说明"、"假设数据"、"例如"**
-"""
-    # Inject already-executed tool calls to prevent LLM from repeating them
-    if tool_results:
-        # Group by tool+input to show repetition count
-        from collections import Counter
-        call_counts = Counter()
-        for tr in tool_results:
-            tool = tr.get("tool", "unknown")
-            inp = json.dumps(tr.get("input", {}), ensure_ascii=False)
-            call_counts[(tool, inp)] += 1
-
-        prompt += "\n\n## 已执行的工具调用（不要重复调用）\n\n"
-        seen = set()
-        for i, tr in enumerate(tool_results, 1):
-            tool = tr.get("tool", "unknown")
-            inp = tr.get("input", {})
-            output = tr.get("output", "")[:200]
-            key = json.dumps({"tool": tool, "input": inp}, ensure_ascii=False)
-            if key in seen:
-                continue
-            seen.add(key)
-            count = call_counts.get((tool, json.dumps(inp, ensure_ascii=False)), 1)
-            status = "成功" if tr.get("success") else "失败"
-            repeat_note = f"（已重复调用 {count} 次！）" if count > 1 else ""
-            prompt += f"{i}. [{tool}] input={json.dumps(inp, ensure_ascii=False)} → {status}{repeat_note}\n   返回: {output}\n"
-        prompt += "\n**你已经执行过以上工具。如果数据已足够回答用户问题，输出 final_answer；如果需要新操作，必须是不同的工具或不同的输入。**\n"
-
-    if previous_analysis:
-        prompt += f"\n\n## 历史分析上下文\n\n以下是之前几轮对话中已执行的分析结果，请基于这些历史结论决定下一步：\n\n{previous_analysis}\n"
-    return prompt
+    return compile_planner_prompt(user_query, previous_analysis, tool_results)
 
 
 def _build_tools_info() -> str:
-    """Build a description of available tools from ToolRegistry."""
-    tools = ToolRegistry.list_all()
-    lines = []
-    for t in tools:
-        lines.append(f"- {t['name']}: {t['description']}")
-        props = t["input_schema"].get("properties", {})
-        for key, val in props.items():
-            desc = val.get("description", "")
-            if val.get("enum"):
-                desc += f" (可选值: {', '.join(val['enum'])})"
-            lines.append(f"    input.{key}: {desc}")
-    lines.append("- final_answer: 给出最终自然语言回答")
-    return "\n".join(lines)
+    return build_tools_info()
 
 
 async def planner_node(state: PlannerState) -> dict:

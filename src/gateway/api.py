@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 from contextlib import asynccontextmanager
@@ -23,6 +24,9 @@ from src.agent.summarizer import generate_summary
 from src.sql.schema_loader import SCHEMA_TEXT
 from src.utils.logging import get_logger
 from config import PLANNER_MODE, SUMMARY_AFTER_ROUNDS
+
+# Global per-request timeout: 60s for the entire chat flow
+CHAT_GLOBAL_TIMEOUT = 60
 
 _log = get_logger("gateway.api")
 
@@ -135,80 +139,88 @@ async def chat(
     ctx.prior_tool_results = await SessionMemory.load_tool_results(req.session_id, req.user_id)
     ctx.prior_analysis = await SessionMemory.load_analysis_context(req.session_id, req.user_id)
 
-    if intent == "DIRECT":
-        # Direct LLM reply -- skip the agent loop entirely
-        _SYSTEM_CHAT_PROMPT = (
-            "你是 AI Data Copilot，一个面向数据工程师的多角色智能助手，具备以下能力：\n"
-            "1. 数据查询 — 通过自然语言自动生成 SQL 查询并获取数据\n"
-            "2. 数据分析 — 指标对比、趋势分析、异常检测与归因分析\n"
-            "3. 故障排查 — 数据 Pipeline 排障，包括 Kafka、Flink、日志查询等\n"
-            "4. 执行决策 — 多步任务规划与自动化执行\n\n"
-            "注意：当前模式下无法直接连接数据库执行 SQL。如果用户提供 SQL 请求审查或报错分析，请基于 SQL 语法规范进行静态分析，指出可能的语法错误、逻辑问题或优化建议。\n"
-            "严禁编造任何查询结果或数据。\n\n"
-            "可用数据表结构（编写 SQL 时必须严格使用以下表名和字段名，不得虚构）：\n"
-            f"{SCHEMA_TEXT}\n\n"
-            "请用专业清晰的方式回答，适当展开说明。如果用户的问题与上述能力无关，友好地引导回到数据相关话题。"
-        )
-        messages = [{"role": "system", "content": _SYSTEM_CHAT_PROMPT}, {"role": "user", "content": req.message}]
-        if history:
-            messages = [{"role": "system", "content": _SYSTEM_CHAT_PROMPT}] + history + [{"role": "user", "content": req.message}]
-        answer = await chat_completion(messages, temperature=0.7)
-        # When confidence is low, append guidance directly (don't rely on LLM)
-        if not intent_confidence:
-            answer += "\n\n💡 **提问可能不够明确，参考以下示例重新提问：**\n"
-            for label, q in IntentClassifier.GUIDANCE_EXAMPLES:
-                answer += f"- {label}：{q}\n"
-        _log.debug("DIRECT reply  answer_len=%d", len(answer))
-    else:
-        # TOOL or TROUBLESHOOT → run agent loop
-        _log.debug("Running agent loop  intent=%s  mode=%s", intent, PLANNER_MODE)
-        if PLANNER_MODE == "langgraph":
-            from src.agent.planner_run import planner_run
-            answer = await planner_run(ctx, req.message)
+    # Wrap the core chat logic with a global timeout to prevent runaway requests
+    async def _run_core_chat() -> str:
+        answer = ""
+
+        if intent == "DIRECT":
+            _SYSTEM_CHAT_PROMPT = (
+                "你是 AI Data Copilot，一个面向数据工程师的多角色智能助手，具备以下能力：\n"
+                "1. 数据查询 — 通过自然语言自动生成 SQL 查询并获取数据\n"
+                "2. 数据分析 — 指标对比、趋势分析、异常检测与归因分析\n"
+                "3. 故障排查 — 数据 Pipeline 排障，包括 Kafka、Flink、日志查询等\n"
+                "4. 执行决策 — 多步任务规划与自动化执行\n\n"
+                "注意：当前模式下无法直接连接数据库执行 SQL。如果用户提供 SQL 请求审查或报错分析，请基于 SQL 语法规范进行静态分析，指出可能的语法错误、逻辑问题或优化建议。\n"
+                "严禁编造任何查询结果或数据。\n\n"
+                "可用数据表结构（编写 SQL 时必须严格使用以下表名和字段名，不得虚构）：\n"
+                f"{SCHEMA_TEXT}\n\n"
+                "请用专业清晰的方式回答，适当展开说明。如果用户的问题与上述能力无关，友好地引导回到数据相关话题。"
+            )
+            messages = [{"role": "system", "content": _SYSTEM_CHAT_PROMPT}, {"role": "user", "content": req.message}]
+            if history:
+                messages = [{"role": "system", "content": _SYSTEM_CHAT_PROMPT}] + history + [{"role": "user", "content": req.message}]
+            answer = await chat_completion(messages, temperature=0.7)
+            if not intent_confidence:
+                answer += "\n\n💡 **提问可能不够明确，参考以下示例重新提问：**\n"
+                for label, q in IntentClassifier.GUIDANCE_EXAMPLES:
+                    answer += f"- {label}：{q}\n"
+            _log.debug("DIRECT reply  answer_len=%d", len(answer))
         else:
-            from src.agent.react import react_run
-            answer = await react_run(ctx, req.message)
-        # When confidence is low, append guidance after the agent's answer
-        if not intent_confidence:
-            answer += "\n\n💡 **提问可能不够明确，参考以下示例重新提问：**\n"
-            for label, q in IntentClassifier.GUIDANCE_EXAMPLES:
-                answer += f"- {label}：{q}\n"
-        _log.debug("Agent done  answer_len=%d", len(answer))
+            _log.debug("Running agent loop  intent=%s  mode=%s", intent, PLANNER_MODE)
+            if PLANNER_MODE == "langgraph":
+                from src.agent.planner_run import planner_run
+                answer = await planner_run(ctx, req.message)
+            else:
+                from src.agent.react import react_run
+                answer = await react_run(ctx, req.message)
+            if not intent_confidence:
+                answer += "\n\n💡 **提问可能不够明确，参考以下示例重新提问：**\n"
+                for label, q in IntentClassifier.GUIDANCE_EXAMPLES:
+                    answer += f"- {label}：{q}\n"
+            _log.debug("Agent done  answer_len=%d", len(answer))
 
-    # Save tool results and analysis context for next round
-    await SessionMemory.save_tool_results(req.session_id, req.user_id, ctx.step_results)
-    analysis_ctx = _extract_analysis_context(ctx.step_results)
-    if analysis_ctx:
-        await SessionMemory.save_analysis_context(req.session_id, req.user_id, analysis_ctx)
+        # Save tool results and analysis context for next round
+        await SessionMemory.save_tool_results(req.session_id, req.user_id, ctx.step_results)
+        analysis_ctx = _extract_analysis_context(ctx.step_results)
+        if analysis_ctx:
+            await SessionMemory.save_analysis_context(req.session_id, req.user_id, analysis_ctx)
 
-    for step in ctx.step_results:
-        log = ToolLog(
-            session_id=req.session_id,
-            trace_id=trace_id,
-            tool_name=step["tool"],
-            input_params=step["input"],
-            output_data=step["output"],
-            status="success" if step["success"] else "failed",
-            latency_ms=step.get("latency_ms"),
-            retry_count=ctx.retry_count,
-        )
-        db.add(log)
-    await db.commit()
-
-    await SessionMemory.save_message(req.session_id, req.user_id, "user", req.message)
-    await SessionMemory.save_message(req.session_id, req.user_id, "assistant", answer)
-
-    round_count = await SessionMemory.get_round_count(req.session_id, req.user_id)
-    if round_count >= SUMMARY_AFTER_ROUNDS:
-        full_history = await SessionMemory.load_history(req.session_id, req.user_id)
-        summary = await generate_summary(full_history)
-        await SessionMemory.save_summary(req.session_id, req.user_id, summary)
-        session.context_summary = summary
+        for step in ctx.step_results:
+            log = ToolLog(
+                session_id=req.session_id,
+                trace_id=trace_id,
+                tool_name=step["tool"],
+                input_params=step["input"],
+                output_data=step["output"],
+                status="success" if step["success"] else "failed",
+                latency_ms=step.get("latency_ms"),
+                retry_count=ctx.retry_count,
+            )
+            db.add(log)
         await db.commit()
 
-    _log.debug("answer  content=%s", answer if answer else "")
-    elapsed = (datetime.utcnow() - start).total_seconds()
-    record_chat("success", elapsed)
+        await SessionMemory.save_message(req.session_id, req.user_id, "user", req.message)
+        await SessionMemory.save_message(req.session_id, req.user_id, "assistant", answer)
+
+        round_count = await SessionMemory.get_round_count(req.session_id, req.user_id)
+        if round_count >= SUMMARY_AFTER_ROUNDS:
+            full_history = await SessionMemory.load_history(req.session_id, req.user_id)
+            summary = await generate_summary(full_history)
+            await SessionMemory.save_summary(req.session_id, req.user_id, summary)
+            session.context_summary = summary
+            await db.commit()
+
+        _log.debug("answer  content=%s", answer if answer else "")
+        elapsed = (datetime.utcnow() - start).total_seconds()
+        record_chat("success", elapsed)
+        return answer
+
+    try:
+        answer = await asyncio.wait_for(_run_core_chat(), timeout=CHAT_GLOBAL_TIMEOUT)
+    except asyncio.TimeoutError:
+        _log.error("Chat request timed out after %ds  message=%s", CHAT_GLOBAL_TIMEOUT, req.message)
+        record_chat("timeout", CHAT_GLOBAL_TIMEOUT)
+        raise HTTPException(status_code=504, detail=f"Request timed out after {CHAT_GLOBAL_TIMEOUT}s")
 
     return {"session_id": req.session_id, "intent": intent, "answer": answer, "status": ctx.state}
 

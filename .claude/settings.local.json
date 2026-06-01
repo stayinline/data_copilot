@@ -21,7 +21,8 @@
       "WebFetch(domain:help.aliyun.com)",
       "WebFetch(domain:www.alibabacloud.com)",
       "Bash(rm:*)",
-      "Bash(ls -1 D:/code/data_copilot/scripts/gen_ppt/gen_*.py)"
+      "Bash(ls -1 D:/code/data_copilot/scripts/gen_ppt/gen_*.py)",
+      "Bash(find D:/code/data_copilot/scripts -type f -name *.py)"
     ]
   }
 }

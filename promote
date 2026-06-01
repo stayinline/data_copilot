@@ -1,5 +1,111 @@
 
-按照 docs/AI-Data-Copilot-MVP-Design.md 的设计，生成 todolist。
-然后按照todolist，逐个生成代码。
 
-需要用到的组件的链接信息全部放在配置config.py中。
+近 7 天的 GMV 趋势怎么样，有没有异常波动
+  5 月 14 日 GMV 下降的原因是什么
+
+  华东地区电子产品，具体是哪个城市、哪个品类导致下滑？
+
+  和去年同期对比情况如何？
+
+docs/AI-Data-Copilot-Production-Design.md
+
+数据链路报错了，帮我排查一下
+  order_sync_job 这个 Flink 任务现在状态怎么样，checkpoint 延迟大吗
+
+
+这个月的告警主要集中在哪些服务
+
+
+近 7 天的 GMV 趋势怎么样，有没有异常波动
+
+
+
+
+帮我写一条SQL，统计每个会员等级中，购买金额前10的商品品类，输出等级、品类、总金额、订单数，按等级和总金额排序
+
+
+这条SQL报错，帮我看看什么问题：
+SELECT region, sum(amount) as gmv FROM orders WHERE order_date_ai BETWEEN '2024-01-01' AND '2024-12-31' GROUP BY region HAVING gmv > 100000 ORDER BY gmv
+
+
+这条SQL执行很慢，帮我看看什么问题：
+SELECT u.user_id, u.city, o.order_id, o.amount, p.product_name
+FROM users u
+JOIN orders o ON u.user_id = o.user_id
+JOIN products p ON o.product_id = p.product_id
+WHERE o.order_date >= '2024-01-01'
+ORDER BY o.amount DESC
+
+
+
+用户 zhangsan 目前有哪些数据表的查询权限
+
+
+
+
+
+
+
+这个项目作为AI竞赛的参赛项目，还有哪些劣势
+
+
+  ipeline 排障无端到端闭环
+Flink、Kafka、日志排查等工具为独立分开调用，依赖 LLM 自主判断调用顺序，演示极易翻车。理想演示效果：实现全自动级联排障，一次请求自动跑完完整链路：check_flink → check_kafka → check_logs → 告警汇总无需人工干预、无需 LLM 逐次决策调用。
+用你认为合适的方案，结合现有的代码，帮我解决这个问题
+
+
+
+图识别过程无可视化
+前端未展示 AI 决策链路：未显性呈现用户意图分类结果（DIRECT / TOOL / TROUBLESHOOT），评委看不到底层智能决策逻辑，专业感不足。
+用你认为合适的方案，结合现有的代码，帮我解决这个问题
+
+
+
+
+
+
+tools：Pipeline 排障 ，也就是 AI 查日志→分析→定位根因。这个tools实现了吗？没有的话就把这个加上，
+
+把 根因分析引擎和Pipeline 排障这两个演示需要案例问题，添加到docs/demo-cases.md文件中
+
+根据目前这个项目，以及docs/AI-Data-Copilot-Production-Design.md的设计，还有AI竞赛的“炸场”效果， 再帮我总结推荐3个杀手级tools
+
+
+ 1. 根因分析引擎（Root Cause Analysis） 这个演示需要的Demo数据有吗
+
+  根据根因分析引擎（Root Cause Analysis）这个演示需要的数据，把Demo数据和表的加工逻辑，在scripts/seed_demo_data.py及其相关文件中修正
+
+
+
+工具调用无性能指标展示
+缺少量化性能数据呈现，缺失竞赛加分项：需增加展示：本次查询耗时、接口响应时长、缓存命中率、模型调用成本等关键指标。
+用你认为合适的方案，结合现有的代码，帮我解决这个问题
+
+
+现在的意图识别是如何实现的，详细讲解。
+
+然后根据docs/demo-cases.md中的演示案例问题和数据，你认为现在的意图识别是否需要优化？
+如果需要，用你认为合适的方案，结合现有的代码和演示问题，帮我解决这个问题
+
+在意图识别的流程中加一个兜底+正向引导的机制：也就是当检测到意图识别效果不好的时候，结合Demo案例的提问，罗列3个正确的提问问题，给出用户正向的引导，让用户重新提问。
+你认为这个是否有必要，如果有，用你认为合适的方案，结合现有的代码，帮我解决这个问题
+
+
+
+结合现在整个项目的实现以及设计蓝图docs/AI-Data-Copilot-Production-Design.md。评价一下现在这个项目参加AI竞赛，有哪些优势和劣势
+
+
+生成一份AI竞赛的宣讲PPT的文案，重点在于用大白话讲好业务故事（创意创新、潜在价值、提效（或者解决的痛点问题）、技术实现。这四大模块必须存在）。
+然后需要结合平台的演示操作，整体控制在10分钟。
+
+
+
+
+
+
+
+
+修改 scripts/seed_demo_data.py的代码逻辑，每次执行，默认生成当前时间的-90天 的全部数据。用于演示
+
+docs/AI-Competition-Presentation-V2.md
+
