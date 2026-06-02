@@ -265,6 +265,8 @@ def _get_table_stats() -> ToolResult:
 class QueryMetadataTool(Tool):
     name = "query_metadata"
     description = "Query table metadata from ClickHouse system tables. Use this to discover available tables, check column schemas, or get CREATE TABLE DDL."
+    permission_tag = "metadata:read"
+    timeout = 20
     input_schema = {
         "type": "object",
         "properties": {

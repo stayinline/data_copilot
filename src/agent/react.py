@@ -2,7 +2,7 @@ import json
 import re
 
 from src.agent.context import ExecutionContext
-from src.tools.base import ToolRegistry
+from src.tools.base import ToolExecutionContext, ToolRegistry
 from src.sql.validator import SqlValidator
 from src.sql.schema_loader import SCHEMA_TEXT
 from src.agent.llm_client import chat_completion
@@ -12,6 +12,15 @@ from src.utils.logging import get_logger
 _log = get_logger("react")
 
 MAX_ROUNDS = 3
+_DEFAULT_TOOL_PERMISSIONS = {"sql:read", "metadata:read", "analysis:read", "pipeline:read"}
+
+
+def _tool_context(ctx: ExecutionContext) -> ToolExecutionContext:
+    return ToolExecutionContext(
+        user_id=ctx.user_id,
+        session_id=ctx.session_id,
+        permissions=ctx.permissions or _DEFAULT_TOOL_PERMISSIONS,
+    )
 
 
 def _format_prior_analysis(prior_analysis: dict | None, prior_tool_results: list[dict]) -> str:
@@ -32,15 +41,18 @@ def _format_prior_analysis(prior_analysis: dict | None, prior_tool_results: list
     return "\n".join(parts)
 
 
-from src.tools.base import ToolRegistry
-
-
 def _build_tools_info() -> str:
     """Build a description of available tools from ToolRegistry."""
     tools = ToolRegistry.list_all()
     lines = []
     for t in tools:
-        lines.append(f"- {t['name']}: {t['description']}")
+        meta = []
+        if t.get("permission_tag"):
+            meta.append(f"permission={t['permission_tag']}")
+        if t.get("timeout"):
+            meta.append(f"timeout={t['timeout']}s")
+        meta_text = f" ({', '.join(meta)})" if meta else ""
+        lines.append(f"- {t['name']}{meta_text}: {t['description']}")
         props = t["input_schema"].get("properties", {})
         for key, val in props.items():
             desc = val.get("description", "")
@@ -117,6 +129,7 @@ async def react_run(ctx: ExecutionContext, user_message: str) -> str:
     """Standard ReAct loop with up to MAX_ROUNDS iterations."""
     _log.debug("react_run start  message=%s  rounds=%d", user_message, MAX_ROUNDS)
     previous_analysis = _format_prior_analysis(ctx.prior_analysis, ctx.prior_tool_results)
+    exec_context = _tool_context(ctx)
     messages = [{"role": "system", "content": _build_system_prompt(previous_analysis)}]
     messages.extend(ctx.conversation_history)
     messages.append({"role": "user", "content": user_message})
@@ -146,6 +159,7 @@ async def react_run(ctx: ExecutionContext, user_message: str) -> str:
         tool = ToolRegistry.get(tool_name)
         tool_latency_ms = 0.0
         tool_from_cache = False
+        result = None
 
         if not tool:
             observation = f"Unknown tool: {tool_name}"
@@ -158,7 +172,7 @@ async def react_run(ctx: ExecutionContext, user_message: str) -> str:
             tool_input["query"] = validation.sanitized_sql or query
 
             if observation is None:
-                result = await tool.execute(tool_input)
+                result = await ToolRegistry.execute(tool_name, tool_input, exec_context)
                 tool_latency_ms = result.latency_ms
                 tool_from_cache = result.from_cache
                 if result.success:
@@ -170,7 +184,7 @@ async def react_run(ctx: ExecutionContext, user_message: str) -> str:
                         error_message=result.error,
                     )
                     if fixed_sql:
-                        result2 = await tool.execute({"query": fixed_sql})
+                        result2 = await ToolRegistry.execute("run_sql", {"query": fixed_sql}, exec_context)
                         if result2.success:
                             observation = json.dumps(result2.data, ensure_ascii=False)
                             tool_input["query"] = fixed_sql
@@ -182,6 +196,7 @@ async def react_run(ctx: ExecutionContext, user_message: str) -> str:
                                 "is_sql_fix": True,
                                 "latency_ms": round(result2.latency_ms, 1),
                                 "from_cache": result2.from_cache,
+                                "metadata": result2.metadata,
                             })
                         else:
                             observation = f"Error: {result2.error}"
@@ -189,7 +204,7 @@ async def react_run(ctx: ExecutionContext, user_message: str) -> str:
                         observation = f"Error: {result.error}"
         else:
             # Generic tool execution (e.g., query_metadata)
-            result = await tool.execute(tool_input)
+            result = await ToolRegistry.execute(tool_name, tool_input, exec_context)
             tool_latency_ms = result.latency_ms
             tool_from_cache = result.from_cache
             if result.success:
@@ -204,6 +219,7 @@ async def react_run(ctx: ExecutionContext, user_message: str) -> str:
             "success": not observation.startswith("Error:") and "validation failed" not in observation,
             "latency_ms": round(tool_latency_ms, 1),
             "from_cache": tool_from_cache,
+            "metadata": result.metadata if result else {},
         })
 
         messages.append({"role": "system", "content": f"Observation: {observation}"})
@@ -217,6 +233,7 @@ async def react_run_stream(ctx: ExecutionContext, user_message: str):
     """Streaming ReAct loop that yields SSE events."""
     _log.debug("react_run_stream start  message=%s", user_message)
     previous_analysis = _format_prior_analysis(ctx.prior_analysis, ctx.prior_tool_results)
+    exec_context = _tool_context(ctx)
     messages = [{"role": "system", "content": _build_system_prompt(previous_analysis)}]
 
     for round_num in range(MAX_ROUNDS):
@@ -247,6 +264,7 @@ async def react_run_stream(ctx: ExecutionContext, user_message: str):
         tool = ToolRegistry.get(tool_name)
         tool_latency_ms = 0.0
         tool_from_cache = False
+        result = None
 
         if not tool:
             observation = f"Unknown tool: {tool_name}"
@@ -258,7 +276,7 @@ async def react_run_stream(ctx: ExecutionContext, user_message: str):
             tool_input["query"] = validation.sanitized_sql or query
 
             if observation is None:
-                result = await tool.execute(tool_input)
+                result = await ToolRegistry.execute(tool_name, tool_input, exec_context)
                 tool_latency_ms = result.latency_ms
                 tool_from_cache = result.from_cache
                 if result.success:
@@ -270,7 +288,7 @@ async def react_run_stream(ctx: ExecutionContext, user_message: str):
                         error_message=result.error,
                     )
                     if fixed_sql:
-                        result2 = await tool.execute({"query": fixed_sql})
+                        result2 = await ToolRegistry.execute("run_sql", {"query": fixed_sql}, exec_context)
                         if result2.success:
                             observation = json.dumps(result2.data, ensure_ascii=False)
                             tool_input["query"] = fixed_sql
@@ -282,6 +300,7 @@ async def react_run_stream(ctx: ExecutionContext, user_message: str):
                                 "is_sql_fix": True,
                                 "latency_ms": round(result2.latency_ms, 1),
                                 "from_cache": result2.from_cache,
+                                "metadata": result2.metadata,
                             }
                             ctx.step_results.append(sql_fix_result)
                             yield {"event": "sql_fix", "data": json.dumps({
@@ -295,7 +314,7 @@ async def react_run_stream(ctx: ExecutionContext, user_message: str):
                         observation = f"Error: {result.error}"
         else:
             # Generic tool execution (e.g., query_metadata)
-            result = await tool.execute(tool_input)
+            result = await ToolRegistry.execute(tool_name, tool_input, exec_context)
             tool_latency_ms = result.latency_ms
             tool_from_cache = result.from_cache
             if result.success:
@@ -317,6 +336,7 @@ async def react_run_stream(ctx: ExecutionContext, user_message: str):
             "success": not observation.startswith("Error:") and "failed" not in observation.lower(),
             "latency_ms": round(tool_latency_ms, 1),
             "from_cache": tool_from_cache,
+            "metadata": result.metadata if result else {},
         })
 
         messages.append({"role": "system", "content": f"Observation: {observation}"})

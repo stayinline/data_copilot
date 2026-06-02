@@ -16,3 +16,4 @@ class ExecutionContext:
     prior_tool_results: list[dict] = field(default_factory=list)
     prior_analysis: dict | None = None
     llm_usage: list[dict] = field(default_factory=list)
+    permissions: set[str] | None = None

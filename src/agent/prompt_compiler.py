@@ -30,7 +30,13 @@ def build_tools_info() -> str:
 
     lines = []
     for tool in ToolRegistry.list_all():
-        lines.append(f"- {tool['name']}: {tool['description']}")
+        meta = []
+        if tool.get("permission_tag"):
+            meta.append(f"permission={tool['permission_tag']}")
+        if tool.get("timeout"):
+            meta.append(f"timeout={tool['timeout']}s")
+        meta_text = f" ({', '.join(meta)})" if meta else ""
+        lines.append(f"- {tool['name']}{meta_text}: {tool['description']}")
         props = tool["input_schema"].get("properties", {})
         for key, val in props.items():
             desc = val.get("description", "")

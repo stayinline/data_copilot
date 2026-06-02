@@ -181,6 +181,8 @@ class PipelineFullDiagnosisTool(Tool):
         "Pipeline 错误日志和告警记录，返回汇总报告。"
         "用于快速定位 Pipeline 故障根因，一次调用完成全链路排查。"
     )
+    permission_tag = "pipeline:read"
+    timeout = 60
     input_schema = {
         "type": "object",
         "properties": {
@@ -194,7 +196,7 @@ class PipelineFullDiagnosisTool(Tool):
                     "service": {"type": "string"},
                     "start_time": {"type": "string", "description": "开始时间 YYYY-MM-DD HH:MM:SS"},
                     "end_time": {"type": "string", "description": "结束时间 YYYY-MM-DD HH:MM:SS"},
-                    "limit": {"type": "integer", "description": "日志查询条数限制，默认 50"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500, "description": "日志查询条数限制，默认 50"},
                 },
             },
         },

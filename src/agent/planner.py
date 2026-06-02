@@ -11,7 +11,7 @@ from src.agent.prompt_compiler import (
     build_tools_info,
 )
 from src.agent.sql_utils import extract_user_sql
-from src.tools.base import ToolRegistry
+from src.tools.base import ToolExecutionContext, ToolRegistry
 from src.sql.validator import SqlValidator
 from src.sql.schema_loader import ALLOWED_TABLES
 from src.utils.logging import get_logger
@@ -22,6 +22,16 @@ from config import (
 )
 
 _log = get_logger("planner.graph")
+
+_DEFAULT_TOOL_PERMISSIONS = {"sql:read", "metadata:read", "analysis:read", "pipeline:read"}
+
+
+def _tool_context(state: PlannerState) -> ToolExecutionContext:
+    return ToolExecutionContext(
+        user_id=state.get("user_id"),
+        session_id=state.get("session_id"),
+        permissions=state.get("permissions") or _DEFAULT_TOOL_PERMISSIONS,
+    )
 
 
 def _extract_user_sql(query: str) -> str | None:
@@ -141,10 +151,12 @@ async def executor_node(state: PlannerState) -> dict:
 
     observation = None
     tool = ToolRegistry.get(tool_name)
+    exec_context = _tool_context(state)
 
     # Track tool performance
     tool_latency_ms = 0.0
     tool_from_cache = False
+    result = None
 
     if not tool:
         observation = f"Unknown tool: {tool_name}"
@@ -175,6 +187,7 @@ async def executor_node(state: PlannerState) -> dict:
                     "success": True,
                     "latency_ms": 0,
                     "from_cache": False,
+                    "metadata": {"execution_status": "skipped_by_dedup"},
                     "skipped_by_dedup": True,
                 }
                 return {
@@ -203,7 +216,7 @@ async def executor_node(state: PlannerState) -> dict:
                     _is_user_sql_diagnosis = True
 
         if observation is None:
-            result = await tool.execute(tool_input)
+            result = await ToolRegistry.execute(tool_name, tool_input, exec_context)
             tool_latency_ms = result.latency_ms
             tool_from_cache = result.from_cache
             if result.success:
@@ -211,9 +224,8 @@ async def executor_node(state: PlannerState) -> dict:
             elif _is_user_sql_diagnosis:
                 # User asked to diagnose their SQL — return error AND proactively check actual schema
                 # so the planner has real data (not just error text) to analyze.
-                _meta_tool = ToolRegistry.get("query_metadata")
                 _schema_info = ""
-                if _meta_tool:
+                if ToolRegistry.get("query_metadata"):
                     # Extract table name from the SQL for targeted schema lookup
                     _matched_table = None
                     for _tbl in sorted(
@@ -224,7 +236,11 @@ async def executor_node(state: PlannerState) -> dict:
                         break
                     if _matched_table:
                         try:
-                            _meta_result = await _meta_tool.execute({"query_type": "schema", "table_name": _matched_table})
+                            _meta_result = await ToolRegistry.execute(
+                                "query_metadata",
+                                {"query_type": "schema", "table_name": _matched_table},
+                                exec_context,
+                            )
                             if _meta_result.success:
                                 _data = _meta_result.data
                                 _cols = ", ".join(c["name"] for c in _data.get("columns", []))
@@ -239,7 +255,7 @@ async def executor_node(state: PlannerState) -> dict:
                     error_message=result.error,
                 )
                 if fixed_sql:
-                    result2 = await tool.execute({"query": fixed_sql})
+                    result2 = await ToolRegistry.execute("run_sql", {"query": fixed_sql}, exec_context)
                     if result2.success:
                         original_sql = tool_input.get("query", "")
                         observation = (
@@ -256,6 +272,7 @@ async def executor_node(state: PlannerState) -> dict:
                             "is_sql_fix": True,
                             "latency_ms": round(result2.latency_ms, 1),
                             "from_cache": result2.from_cache,
+                            "metadata": result2.metadata,
                         })
                     else:
                         observation = f"【SQL 自动修复失败】原始错误：{result.error}。修复后的 SQL 仍然失败：{result2.error}"
@@ -265,7 +282,7 @@ async def executor_node(state: PlannerState) -> dict:
 
     else:
         # Generic tool execution (e.g., query_metadata)
-        result = await tool.execute(tool_input)
+        result = await ToolRegistry.execute(tool_name, tool_input, exec_context)
         tool_latency_ms = result.latency_ms
         tool_from_cache = result.from_cache
         if result.success:
@@ -282,6 +299,7 @@ async def executor_node(state: PlannerState) -> dict:
         ),
         "latency_ms": round(tool_latency_ms, 1),
         "from_cache": tool_from_cache,
+        "metadata": result.metadata if result else {},
     }
 
     # With Annotated[list, operator.add], return ONLY the delta (new items).

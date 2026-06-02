@@ -51,6 +51,8 @@ class PipelineTroubleshootTool(Tool):
         "Use this to diagnose pipeline failures, Kafka lag, Flink backpressure, "
         "and application log errors."
     )
+    permission_tag = "pipeline:read"
+    timeout = 30
     input_schema = {
         "type": "object",
         "properties": {
@@ -72,7 +74,7 @@ class PipelineTroubleshootTool(Tool):
                     "status": {"type": "string"},
                     "start_time": {"type": "string"},
                     "end_time": {"type": "string"},
-                    "limit": {"type": "integer"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500},
                 },
             },
         },

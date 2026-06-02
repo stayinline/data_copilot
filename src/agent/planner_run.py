@@ -50,6 +50,9 @@ async def planner_run(ctx: ExecutionContext, user_message: str) -> str:
     previous_analysis = _format_prior_analysis(ctx.prior_analysis, ctx.prior_tool_results)
     initial_state: PlannerState = {
         "user_query": user_message,
+        "user_id": ctx.user_id,
+        "session_id": ctx.session_id,
+        "permissions": ctx.permissions or {"sql:read", "metadata:read", "analysis:read", "pipeline:read"},
         "intent": "",
         "plan": "",
         "current_step_index": 0,
@@ -95,6 +98,9 @@ async def planner_run_stream(ctx: ExecutionContext, user_message: str):
 
     initial_state: PlannerState = {
         "user_query": user_message,
+        "user_id": ctx.user_id,
+        "session_id": ctx.session_id,
+        "permissions": ctx.permissions or {"sql:read", "metadata:read", "analysis:read", "pipeline:read"},
         "intent": "",
         "plan": "",
         "current_step_index": 0,

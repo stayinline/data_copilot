@@ -24,11 +24,13 @@ _log = get_logger("tool.run_sql")
 class RunSqlTool(Tool):
     name = "run_sql"
     description = "Execute read-only SQL SELECT queries against ClickHouse"
+    permission_tag = "sql:read"
+    timeout = 30
     input_schema = {
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "SQL SELECT statement"},
-            "limit": {"type": "integer", "default": 1000, "max": 10000},
+            "limit": {"type": "integer", "default": 1000, "maximum": 10000},
         },
         "required": ["query"],
     }

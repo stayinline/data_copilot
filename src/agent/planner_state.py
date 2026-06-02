@@ -10,6 +10,9 @@ class PlannerState(TypedDict, total=False):
     """
 
     user_query: str
+    user_id: str
+    session_id: str
+    permissions: set[str]
     intent: str
     plan: str
     current_step_index: int

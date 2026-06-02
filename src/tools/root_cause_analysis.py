@@ -75,6 +75,8 @@ class RootCauseAnalysisTool(Tool):
         "with the root cause identified. Use this when users ask '为什么XX下降了' "
         "or similar anomaly investigation questions."
     )
+    permission_tag = "analysis:read"
+    timeout = 45
     input_schema = {
         "type": "object",
         "properties": {
