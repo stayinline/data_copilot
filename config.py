@@ -76,6 +76,14 @@ PLANNER_MAX_DEPTH = 5
 PLANNER_MAX_TOOL_CALLS = 10
 PLANNER_MODE = "langgraph"  # "langgraph" | "react"
 
+# Phase 3: Advanced Reasoning
+REASONING_THOUGHT_STRUCTURE = True        # Explicit Thought output
+REASONING_TOT_ENABLED = True              # Tree of Thoughts Beam Search
+REASONING_SUBTASK_DECOMPOSITION = True    # Automatic subtask decomposition
+REASONING_BACKTRACK_ENABLED = True        # Backtracking retry on failure
+TOT_BEAM_WIDTH = 3                        # Beam width for ToT
+BACKTRACK_MAX_DEPTH = 3                   # Maximum backtrack depth
+
 # Server
 APP_HOST = "0.0.0.0"
 APP_PORT = 8800

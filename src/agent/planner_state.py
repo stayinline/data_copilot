@@ -26,3 +26,12 @@ class PlannerState(TypedDict, total=False):
     _token_callback: Callable[[str], None] | None
     previous_analysis: str
     _usage_list: list[dict]
+
+    # ── Advanced reasoning fields (Phase 3) ──
+    thought_history: Annotated[list[dict], operator.add]
+    beam_candidates: list[dict]
+    subtasks: list[dict]
+    current_subtask_index: int
+    failed_actions: Annotated[list[dict], operator.add]
+    backtrack_mode: bool
+    backtrack_depth: int

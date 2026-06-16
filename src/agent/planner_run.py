@@ -5,6 +5,12 @@ from src.agent.context import ExecutionContext
 from src.agent.planner import build_planner_graph, build_planner_graph_stream
 from src.agent.planner_state import PlannerState
 from src.utils.logging import get_logger
+from config import (
+    REASONING_THOUGHT_STRUCTURE,
+    REASONING_TOT_ENABLED,
+    REASONING_SUBTASK_DECOMPOSITION,
+    REASONING_BACKTRACK_ENABLED,
+)
 
 _log = get_logger("planner")
 
@@ -65,6 +71,14 @@ async def planner_run(ctx: ExecutionContext, user_message: str) -> str:
         "error": "",
         "previous_analysis": previous_analysis,
         "_usage_list": [],
+        # Advanced reasoning fields (Phase 3)
+        "thought_history": [],
+        "beam_candidates": [],
+        "subtasks": [],
+        "current_subtask_index": 0,
+        "failed_actions": [],
+        "backtrack_mode": False,
+        "backtrack_depth": 0,
     }
 
     result = await _planner_graph.ainvoke(initial_state)
@@ -114,6 +128,14 @@ async def planner_run_stream(ctx: ExecutionContext, user_message: str):
         "previous_analysis": previous_analysis,
         "_token_callback": token_callback,
         "_usage_list": [],
+        # Advanced reasoning fields (Phase 3)
+        "thought_history": [],
+        "beam_candidates": [],
+        "subtasks": [],
+        "current_subtask_index": 0,
+        "failed_actions": [],
+        "backtrack_mode": False,
+        "backtrack_depth": 0,
     }
 
     async def drive_graph():
@@ -127,7 +149,45 @@ async def planner_run_stream(ctx: ExecutionContext, user_message: str):
                     if len(node_usage) > len(usage_list):
                         usage_list = list(node_usage)
 
-                    if node_name == "executor":
+                    if node_name == "decompose":
+                        subtasks = node_output.get("subtasks", [])
+                        if subtasks:
+                            event_queue.put_nowait({
+                                "event": "subtask_start",
+                                "data": json.dumps({
+                                    "subtasks": subtasks,
+                                    "count": len(subtasks),
+                                }),
+                            })
+                        else:
+                            event_queue.put_nowait({
+                                "event": "thinking",
+                                "data": json.dumps({"message": "任务简单，无需分解"}),
+                            })
+
+                    elif node_name == "parallel_executor":
+                        tool_results = node_output.get("tool_results", [])
+                        for tr in tool_results:
+                            event_queue.put_nowait({
+                                "event": "subtask_complete",
+                                "data": json.dumps({
+                                    "subtask_id": tr.get("metadata", {}).get("subtask_id"),
+                                    "tool": tr.get("tool"),
+                                    "status": "success" if tr.get("success") else "failed",
+                                }),
+                            })
+                            ctx.step_results.append(tr)
+                        observations = node_output.get("observations", [])
+                        if observations:
+                            event_queue.put_nowait({
+                                "event": "tool_result",
+                                "data": json.dumps({
+                                    "tool": "parallel_executor",
+                                    "result": "; ".join(observations)[:500],
+                                }),
+                            })
+
+                    elif node_name == "executor":
                         tool_results = node_output.get("tool_results", [])
                         if tool_results:
                             last_result = tool_results[-1]
@@ -159,12 +219,39 @@ async def planner_run_stream(ctx: ExecutionContext, user_message: str):
                             })
                             ctx.step_results.append(last_result)
 
+                        # Emit backtrack event if backtrack_mode was set
+                        if node_output.get("backtrack_mode"):
+                            failed = node_output.get("failed_actions", [])
+                            event_queue.put_nowait({
+                                "event": "backtrack",
+                                "data": json.dumps({
+                                    "depth": node_output.get("backtrack_depth", 1),
+                                    "failed_action": failed[-1].get("action_name", "") if failed else "",
+                                    "error": failed[-1].get("error", "") if failed else "",
+                                }),
+                            })
+
                     elif node_name == "planner":
                         fa = node_output.get("final_answer", "")
                         if fa:
                             final_answer_holder["answer"] = fa
                             ctx.step_results.extend(node_output.get("tool_results", []))
                         else:
+                            # Emit thought if present
+                            thought_hist = node_output.get("thought_history", [])
+                            if thought_hist:
+                                for th in thought_hist:
+                                    event_queue.put_nowait({
+                                        "event": "thought",
+                                        "data": json.dumps(th),
+                                    })
+                            # Emit beam candidates if present
+                            beam_cands = node_output.get("beam_candidates", [])
+                            if beam_cands:
+                                event_queue.put_nowait({
+                                    "event": "beam_candidates",
+                                    "data": json.dumps({"candidates": beam_cands}),
+                                })
                             event_queue.put_nowait({
                                 "event": "thinking",
                                 "data": json.dumps({

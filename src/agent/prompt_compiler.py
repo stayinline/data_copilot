@@ -11,6 +11,11 @@ from src.agent.planner_skills import PlannerSkill, select_planner_skill
 from src.agent.sql_utils import extract_user_sql
 from src.sql.schema_loader import SCHEMA_TEXT
 from src.tools.base import ToolRegistry
+from config import (
+    REASONING_BACKTRACK_ENABLED,
+    REASONING_THOUGHT_STRUCTURE,
+    REASONING_TOT_ENABLED,
+)
 
 
 @dataclass(frozen=True)

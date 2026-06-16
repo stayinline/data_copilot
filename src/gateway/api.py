@@ -23,10 +23,11 @@ from src.agent.llm_client import chat_completion
 from src.agent.summarizer import generate_summary
 from src.sql.schema_loader import SCHEMA_TEXT
 from src.utils.logging import get_logger
-from config import PLANNER_MODE, SUMMARY_AFTER_ROUNDS
+from config import PLANNER_MODE, PLANNER_MAX_TOOL_CALLS, SUMMARY_AFTER_ROUNDS
 
-# Global per-request timeout: 60s for the entire chat flow
-CHAT_GLOBAL_TIMEOUT = 60
+# Global per-request timeout: 120s for the entire chat flow
+# Increased from 60s to accommodate parallel subtask LLM calls and ToT beam search
+CHAT_GLOBAL_TIMEOUT = 120
 
 _log = get_logger("gateway.api")
 
@@ -374,6 +375,24 @@ async def _sse_generator(ctx: ExecutionContext, message: str, db: AsyncSession, 
             4,
         )
 
+        # Aggregate reasoning metrics (Phase 3)
+        reasoning_metrics = {}
+        if ctx.step_results:
+            # Count subtask results
+            subtask_results = [s for s in ctx.step_results if s.get("metadata", {}).get("subtask_id")]
+            if subtask_results:
+                reasoning_metrics["subtasks_total"] = len(subtask_results)
+                reasoning_metrics["subtasks_completed"] = sum(1 for s in subtask_results if s.get("success"))
+            # Count failures (for backtrack tracking)
+            failed_steps = [s for s in ctx.step_results if not s.get("success")]
+            if failed_steps:
+                reasoning_metrics["tool_failures"] = len(failed_steps)
+        # Beam search info from context
+        if hasattr(ctx, "llm_usage") and ctx.llm_usage:
+            total_ll_calls = sum(u.get("llm_calls", 1) for u in ctx.llm_usage)
+            if total_ll_calls > PLANNER_MAX_TOOL_CALLS:
+                reasoning_metrics["extra_llm_calls_for_tot"] = total_ll_calls - PLANNER_MAX_TOOL_CALLS
+
         metrics_data = {
             "total_elapsed_ms": total_elapsed_ms,
             "llm_calls": llm_usage["llm_calls"],
@@ -388,6 +407,7 @@ async def _sse_generator(ctx: ExecutionContext, message: str, db: AsyncSession, 
             "cache_hits": cache_hits,
             "cache_misses": cache_misses,
             "estimated_cost": estimated_cost,
+            **reasoning_metrics,
         }
         yield f"event: metrics\ndata: {json.dumps(metrics_data)}\n\n"
 
