@@ -10,16 +10,17 @@ class PlannerSkill:
     name: str
     purpose: str
     instructions: str
+    preferred_tools: tuple[str, ...] = ()
 
 
 _METRIC_RE = re.compile(
-    r"(gmv|gm|营收|销售额|利润|毛利|订单|用户|活跃|转化|留存|kpi|指标|pv|uv|复购|新客|客单价)",
+    r"(gmv|营收|销售额|利润|毛利|订单|用户|活跃|转化|留存|kpi|指标|pv|uv|复购|新客|客单价)",
     re.IGNORECASE,
 )
 _ROOT_CAUSE_RE = re.compile(r"(为什么|原因|导致|下滑|下降|下跌|骤降|影响最大|归因)", re.IGNORECASE)
 _TREND_RE = re.compile(r"(趋势|波动|近\s*\d+|最近|同比|环比|对比|变化|走势|有没有异常)", re.IGNORECASE)
 _PIPELINE_RE = re.compile(
-    r"(pipeline|数据链路|数据同步|kafka|flink|checkpoint|反压|积压|消费|topic|消费组|日志|log|告警|alert|报错|宕机|任务状态)",
+    r"(pipeline|数据链路|数据同步|kafka|flink|checkpoint|反压|积压|消费组|topic|告警|alert|报错|宕机|任务状态)",
     re.IGNORECASE,
 )
 _TROUBLESHOOT_VERB_RE = re.compile(r"(排查|诊断|检查|看看|分析|为什么|怎么了|状态|延迟|集中在哪些|主要集中)", re.IGNORECASE)
@@ -27,7 +28,7 @@ _METADATA_RE = re.compile(
     r"(有哪些表|有什么表|哪些表|表结构|表字段|有哪些字段|什么字段|字段有哪些|表信息|表说明|metadata|schema|血缘|lineage|权限|permission|grant|变更历史)",
     re.IGNORECASE,
 )
-_SQL_ERROR_RE = re.compile(r"(报错|错误|异常|失败|跑不通|有问题|执行不了|语法错误|syntax error|error|检查|看看)", re.IGNORECASE)
+_SQL_ERROR_RE = re.compile(r"(报错|错误|异常|失败|跑不通|有问题|执行不了|语法错误|syntax error|error)", re.IGNORECASE)
 _SQL_OPTIMIZATION_RE = re.compile(r"(慢|优化|性能|调优|加速|提速|效率|卡顿|慢查询|执行慢)", re.IGNORECASE)
 
 
@@ -41,6 +42,7 @@ SKILLS: dict[str, PlannerSkill] = {
 - 第一动作必须是用 run_sql 原封不动执行用户提供的 SQL。
 - 如果 run_sql 返回字段不存在、表不存在或语法错误，再调用 query_metadata 查看相关表的真实 schema。
 - 最终回答必须引用实际错误信息和真实 schema，不要在未执行 SQL 前猜测问题。""",
+        preferred_tools=("run_sql", "query_metadata"),
     ),
     "sql_optimization": PlannerSkill(
         id="sql_optimization",
@@ -51,6 +53,7 @@ SKILLS: dict[str, PlannerSkill] = {
 - 优先执行用户 SQL 或检查相关表 schema，识别 JOIN、过滤、排序、聚合和日期范围问题。
 - 建议必须落到可执行改法，例如减少扫描范围、补充过滤条件、调整 JOIN 顺序或避免无界 ORDER BY。
 - 不要给出脱离当前表结构的通用空话。""",
+        preferred_tools=("run_sql", "query_metadata"),
     ),
     "pipeline_diagnosis": PlannerSkill(
         id="pipeline_diagnosis",
@@ -60,7 +63,8 @@ SKILLS: dict[str, PlannerSkill] = {
 - 用户提到 pipeline、Kafka、Flink、checkpoint、反压、积压、日志、告警或数据链路异常时使用。
 - 优先调用 pipeline_full_diagnosis，一次完成 Flink → Kafka → logs → alerts 的级联检查。
 - 如果问题聚焦单一环节，再使用 pipeline_troubleshoot 做 targeted check。
-- 最终回答按“结论、证据、影响范围、建议动作”组织。""",
+- 最终回答按"结论、证据、影响范围、建议动作"组织。""",
+        preferred_tools=("pipeline_full_diagnosis", "pipeline_troubleshoot"),
     ),
     "metadata": PlannerSkill(
         id="metadata",
@@ -70,16 +74,18 @@ SKILLS: dict[str, PlannerSkill] = {
 - 用户询问有哪些表、表结构、字段、DDL、血缘、权限、schema 变更时使用。
 - 必须调用 query_metadata；不要直接查询 system 表，也不要仅凭 prompt 中的 schema 回答。
 - 如果用户问权限、血缘或 schema 变更，优先基于可用业务表生成只读查询，必要时先查表结构。""",
+        preferred_tools=("query_metadata",),
     ),
     "root_cause_analysis": PlannerSkill(
         id="root_cause_analysis",
         name="指标归因分析",
         purpose="解释 GMV、营收、订单等指标下降或异常的原因。",
         instructions="""\
-- 用户问“为什么下降/下滑/异常/原因/哪个维度影响最大”时使用。
+- 用户问"为什么下降/下滑/异常/原因/哪个维度影响最大"时使用。
 - 优先调用 root_cause_analysis，并传入明确的 metric。
 - 如果用户指定日期、区域或品类，在工具输入或后续查询中保留这些约束。
 - 最终回答必须区分整体变化、主要区域/品类、订单交叉验证和可能根因。""",
+        preferred_tools=("root_cause_analysis",),
     ),
     "metric_trend": PlannerSkill(
         id="metric_trend",
@@ -91,6 +97,7 @@ SKILLS: dict[str, PlannerSkill] = {
 - 查询 metrics 表趋势时必须按日期范围过滤，不要用 LIMIT 伪造最近 N 天。
 - metrics 表按 (metric_date, metric_name, region, category) 存储；整体趋势需要过滤 category = '合计' 或按日期聚合。
 - 趋势 SQL 应按 metric_date 升序返回，便于解释走势。""",
+        preferred_tools=("run_sql",),
     ),
     "data_query": PlannerSkill(
         id="data_query",
@@ -101,6 +108,7 @@ SKILLS: dict[str, PlannerSkill] = {
 - 如果表结构不确定，先调用 query_metadata；确认后用 run_sql 查询。
 - SQL 必须基于已知表和字段，默认限制结果规模。
 - 最终回答先给核心结论，再给关键数据明细。""",
+        preferred_tools=("query_metadata", "run_sql"),
     ),
     "direct_answer": PlannerSkill(
         id="direct_answer",
@@ -110,8 +118,29 @@ SKILLS: dict[str, PlannerSkill] = {
 - 只有当问题不需要真实数据、元数据或线上状态时使用。
 - 如果进入 planner 后仍发现需要真实数据，改用更具体的工具型 skill。
 - 不要声称已经执行查询。""",
+        preferred_tools=(),
     ),
 }
+
+
+def validate_all_skills() -> list[str]:
+    """Validate that every skill's preferred_tools reference registered tools.
+
+    Must be called after tools are registered (e.g. after ``import src.tools``).
+    Returns a list of human-readable error messages; empty means all good.
+    """
+    import src.tools  # noqa: F401  # ensure tools are registered
+    from src.tools.base import ToolRegistry
+
+    valid_tools = {t["name"] for t in ToolRegistry.list_all()}
+    errors: list[str] = []
+    for skill in SKILLS.values():
+        for tool_name in skill.preferred_tools:
+            if tool_name not in valid_tools:
+                errors.append(
+                    f"skill '{skill.id}' references unknown tool '{tool_name}'"
+                )
+    return errors
 
 
 def select_planner_skill(user_query: str) -> PlannerSkill:

@@ -1,7 +1,7 @@
 import unittest
 
 from src.agent.planner import _build_planner_prompt, _extract_user_sql
-from src.agent.planner_skills import select_planner_skill
+from src.agent.planner_skills import SKILLS, select_planner_skill, validate_all_skills
 from src.agent.prompt_compiler import build_prompt_context
 
 
@@ -35,6 +35,25 @@ class PlannerSkillSelectionTests(unittest.TestCase):
 
         self.assertEqual(select_planner_skill(error_query).id, "sql_diagnosis")
         self.assertEqual(select_planner_skill(slow_query).id, "sql_optimization")
+
+    def test_generic_sql_review_without_error_context_is_not_diagnosis(self):
+        """'帮我看看这条SQL' without error keywords should not trigger sql_diagnosis."""
+        query = "帮我看看这条SQL：SELECT region FROM orders WHERE order_date = '2024-01-01'"
+        skill = select_planner_skill(query)
+        self.assertNotEqual(skill.id, "sql_diagnosis")
+
+    def test_sql_log_query_does_not_trigger_pipeline(self):
+        """'查看SQL执行日志' should not be routed to pipeline_diagnosis."""
+        query = "查看 SQL 执行日志"
+        skill = select_planner_skill(query)
+        self.assertNotEqual(skill.id, "pipeline_diagnosis")
+
+    def test_english_word_containing_gm_does_not_trigger_metric(self):
+        """'algorithm' contains 'gm' but should not match as a metric term."""
+        query = "这个 algorithm 趋势怎么样"
+        skill = select_planner_skill(query)
+        self.assertNotEqual(skill.id, "metric_trend")
+        self.assertNotEqual(skill.id, "root_cause_analysis")
 
 
 class PlannerPromptCompilerTests(unittest.TestCase):
@@ -125,6 +144,37 @@ class SqlExtractionTests(unittest.TestCase):
             _extract_user_sql(query),
             "SELECT region FROM orders WHERE order_date_ai = '2024-01-01'",
         )
+
+
+class SkillIntegrityTests(unittest.TestCase):
+    def test_all_skills_reference_valid_tools(self):
+        """Every skill's preferred_tools must exist in the ToolRegistry."""
+        errors = validate_all_skills()
+        self.assertEqual(errors, [], msg="\n".join(errors))
+
+    def test_all_skills_have_preferred_tools_field(self):
+        """Every skill must declare preferred_tools (even if empty)."""
+        for skill_id, skill in SKILLS.items():
+            self.assertTrue(
+                hasattr(skill, "preferred_tools"),
+                f"skill '{skill_id}' missing preferred_tools field",
+            )
+            self.assertIsInstance(
+                skill.preferred_tools,
+                tuple,
+                msg=f"skill '{skill_id}' preferred_tools should be a tuple",
+            )
+
+    def test_non_direct_answer_skills_have_at_least_one_preferred_tool(self):
+        """All skills except direct_answer should prefer at least one tool."""
+        for skill_id, skill in SKILLS.items():
+            if skill_id == "direct_answer":
+                continue
+            self.assertGreater(
+                len(skill.preferred_tools),
+                0,
+                msg=f"skill '{skill_id}' should have at least one preferred tool",
+            )
 
 
 if __name__ == "__main__":
